@@ -1,0 +1,27 @@
+{
+  "name": "pulsewisdom",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:mobile": "yarn workspace @pulsewisdom/mobile start",
+    "dev:web": "yarn workspace @pulsewisdom/web start",
+    "dev:backend": "yarn workspace @pulsewisdom/backend start",
+    "build": "yarn workspaces run build",
+    "test": "yarn workspaces run test",
+    "lint": "yarn workspaces run lint"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.11",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "eslint-import-resolver-typescript": "^4.2.2",
+    "prettier": "^3.0.0",
+    "testcontainers": "^10.21.0",
+    "typescript": "^5.1.3"
+  }
+}
