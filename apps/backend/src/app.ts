@@ -1,8 +1,8 @@
-import express from 'express';
+import express, { RequestHandler } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import { errorHandler } from './shared/middleware/errorHandler';
+import { errorHandler } from './api/middleware/errorHandler';
 import { requestLogger } from './shared/middleware/requestLogger';
 import { addRequestId } from './shared/middleware/requestId';
 import { setupRoutes } from './api/routes';
@@ -19,7 +19,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Performance middleware
-app.use(compression());
+app.use(compression() as unknown as RequestHandler);
 
 // Request tracking
 app.use(addRequestId);

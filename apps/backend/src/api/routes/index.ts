@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Application } from 'express';
 import authRoutes from './auth.routes';
 import userRoutes from './user.routes';
 import birthChartRoutes from './birthChart.routes';
@@ -34,5 +34,9 @@ router.get('/health', (req, res) => {
     }
   });
 });
+
+export const setupRoutes = (app: Application): void => {
+  app.use(router);
+};
 
 export default router; 

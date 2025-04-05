@@ -8,7 +8,7 @@ export const config = {
   
   // MongoDB Configuration
   mongo: {
-    url: process.env.MONGODB_URI || 'mongodb://localhost:27017',
+    url: process.env.MONGODB_URL || 'mongodb://localhost:27017',
     dbName: process.env.MONGODB_DB_NAME || 'pulsewisdom',
     options: {
       useNewUrlParser: true,
@@ -21,7 +21,7 @@ export const config = {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
     socket: {
       connectTimeout: 10000,
-      reconnectStrategy: (retries: number) => Math.min(retries * 50, 1000)
+      reconnectStrategy: (retries: number) => Math.min(retries * 50, 2000)
     }
   },
 
@@ -32,9 +32,18 @@ export const config = {
     refreshTokenExpiry: '7d'
   },
 
+  // OpenAI Configuration
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY || '',
+    model: 'text-davinci-003',
+    maxTokens: 150,
+    temperature: 0.7
+  },
+
   // Ephemeris Service Configuration
   ephemeris: {
-    apiUrl: process.env.EPHEMERIS_API_URL || 'http://localhost:5000',
+    apiUrl: process.env.EPHEMERIS_API_URL || 'http://localhost:4000',
+    apiKey: process.env.EPHEMERIS_API_KEY || '',
     cacheExpiry: 3600 // 1 hour
   },
 

@@ -1,10 +1,10 @@
-import { Types, Document } from 'mongoose';
+import { Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
-import { User, IUser } from '../models/User';
+import { User, IUser } from '../../domain/models/User';
 import { BirthChartService } from './BirthChartService';
-import { ValidationError, NotFoundError, DatabaseError } from '../types/errors';
-import { ICache } from '../infrastructure/cache/ICache';
-import { RedisCache } from '../infrastructure/cache/RedisCache';
+import { ValidationError, NotFoundError, DatabaseError } from '../../domain/errors';
+import { ICache } from '../../infrastructure/cache/ICache';
+import { RedisCache } from '../../infrastructure/cache/RedisCache';
 import { EphemerisService } from './EphemerisService';
 
 // Define a type that includes the _id field
