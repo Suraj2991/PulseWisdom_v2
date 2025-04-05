@@ -1,11 +1,13 @@
 import { CelestialBody } from '../../types/ephemeris.types';
 
 export interface ICache {
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
   get<T>(key: string): Promise<T | null>;
-  set(key: string, value: any, ttlSeconds?: number): Promise<void>;
+  set<T>(key: string, value: T, ttlSeconds?: number): Promise<void>;
   delete(key: string): Promise<void>;
-  keys(pattern: string): Promise<string[]>;
   clear(): Promise<void>;
+  keys(pattern: string): Promise<string[]>;
   exists(key: string): Promise<boolean>;
   getPlanetaryPositions(): Promise<CelestialBody[] | null>;
   setPlanetaryPositions(positions: CelestialBody[]): Promise<void>;
@@ -16,5 +18,4 @@ export interface ICache {
   setInsight(id: string, data: any): Promise<void>;
   deleteInsight(id: string): Promise<void>;
   clearCache(): Promise<void>;
-  disconnect(): Promise<void>;
 } 

@@ -1,58 +1,64 @@
-import Redis from 'ioredis';
+import { createClient, RedisClientType } from 'redis';
 import { ICache } from './ICache';
 import { ServiceError } from '../../types/errors';
 import { CelestialBody } from '../../types/ephemeris.types';
 
 export class RedisCache implements ICache {
-  private readonly client: Redis;
+  private client: RedisClientType;
+  private isConnected: boolean = false;
   private readonly PLANETARY_POSITIONS_KEY = 'planetary:positions';
   private readonly BIRTH_CHART_KEY_PREFIX = 'birthchart:';
   private readonly INSIGHT_KEY_PREFIX = 'insight:';
   private readonly DEFAULT_TTL = 3600; // 1 hour
 
   constructor(redisUrl: string) {
-    this.client = new Redis(redisUrl);
+    this.client = createClient({
+      url: redisUrl
+    });
 
-    this.client.on('error', (error: Error) => {
-      console.error('Redis connection error:', error);
+    this.client.on('error', (err) => console.error('Redis Client Error:', err));
+    this.client.on('connect', () => console.log('Redis Client Connected'));
+    this.client.on('disconnect', () => {
+      console.log('Redis Client Disconnected');
+      this.isConnected = false;
     });
   }
 
-  async get<T>(key: string): Promise<T | null> {
-    try {
-      const value = await this.client.get(key);
-      return value ? JSON.parse(value) : null;
-    } catch (error) {
-      console.error('Error getting value from cache:', error);
-      throw new ServiceError('Failed to retrieve value from cache');
+  async connect(): Promise<void> {
+    if (!this.isConnected) {
+      await this.client.connect();
+      this.isConnected = true;
     }
   }
 
-  async set(key: string, value: any, ttlSeconds: number): Promise<void> {
-    try {
-      await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds);
-    } catch (error) {
-      console.error('Error setting value in cache:', error);
-      throw new ServiceError('Failed to set value in cache');
+  async disconnect(): Promise<void> {
+    if (this.isConnected) {
+      await this.client.quit();
+      this.isConnected = false;
+    }
+  }
+
+  async get<T>(key: string): Promise<T | null> {
+    const value = await this.client.get(key);
+    if (!value) return null;
+    return JSON.parse(value) as T;
+  }
+
+  async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
+    const stringValue = JSON.stringify(value);
+    if (ttlSeconds) {
+      await this.client.setEx(key, ttlSeconds, stringValue);
+    } else {
+      await this.client.set(key, stringValue);
     }
   }
 
   async delete(key: string): Promise<void> {
-    try {
-      await this.client.del(key);
-    } catch (error) {
-      console.error('Error deleting key from cache:', error);
-      throw new ServiceError('Failed to delete key from cache');
-    }
+    await this.client.del(key);
   }
 
   async clear(): Promise<void> {
-    try {
-      await this.client.flushall();
-    } catch (error) {
-      console.error('Error clearing cache:', error);
-      throw new ServiceError('Failed to clear cache');
-    }
+    await this.client.flushDb();
   }
 
   async exists(key: string): Promise<boolean> {
@@ -157,15 +163,6 @@ export class RedisCache implements ICache {
     } catch (error) {
       console.error('Error clearing cache:', error);
       throw new ServiceError('Failed to clear cache');
-    }
-  }
-
-  async disconnect(): Promise<void> {
-    try {
-      await this.client.quit();
-    } catch (error) {
-      console.error('Error disconnecting from Redis:', error);
-      throw new ServiceError('Failed to disconnect from Redis');
     }
   }
 

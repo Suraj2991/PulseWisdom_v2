@@ -1,44 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
-import winston from 'winston';
+import morgan from 'morgan';
 
-// Configure winston logger
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      ),
-    }),
-    new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'combined.log' }),
-  ],
+// Create a custom format that includes request ID and user ID if available
+const logFormat = ':id :remote-addr :method :url :status :response-time ms :user-id';
+
+// Add token for request ID
+morgan.token('id', (req: Request) => req.id as string);
+
+// Add token for user ID
+morgan.token('user-id', (req: Request) => {
+  return req.user?.id || '-';
 });
 
-export const requestLogger = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  const start = Date.now();
-
-  // Log when the request completes
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    logger.info({
-      method: req.method,
-      url: req.url,
-      status: res.statusCode,
-      duration: `${duration}ms`,
-      userAgent: req.get('user-agent'),
-      ip: req.ip,
-    });
-  });
-
-  next();
-}; 
+// Create the middleware
+export const requestLogger = morgan(logFormat, {
+  stream: {
+    write: (message: string) => {
+      console.log(message.trim());
+    }
+  }
+}); 
