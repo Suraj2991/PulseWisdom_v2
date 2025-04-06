@@ -1,94 +1,84 @@
-import { createClient, RedisClientType } from 'redis';
-import { ICacheClient } from '../../domain/ports/ICacheClient';
+import { Redis } from 'ioredis';
+import { ICache } from '../cache/ICache';
+import { CelestialBody } from '../../domain/types/ephemeris.types';
 
-export class RedisClient implements ICacheClient {
-  private client: RedisClientType;
+export class RedisClient implements ICache {
+  private redis: Redis;
 
-  constructor(url: string) {
-    this.client = createClient({ url });
-    
-    this.client.on('error', (err) => {
-      console.error('Redis Client Error:', err);
-    });
+  constructor(redisUrl: string) {
+    this.redis = new Redis(redisUrl);
   }
 
   async connect(): Promise<void> {
-    await this.client.connect();
+    await this.redis.connect();
   }
 
   async disconnect(): Promise<void> {
-    await this.client.quit();
+    await this.redis.quit();
   }
 
-  async get(key: string): Promise<string | null> {
-    return this.client.get(key);
-  }
-
-  async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
-    if (ttlSeconds) {
-      await this.client.setEx(key, ttlSeconds, value);
-    } else {
-      await this.client.set(key, value);
+  async get<T>(key: string): Promise<T | null> {
+    const raw = await this.redis.get(key);
+    try {
+      return raw ? JSON.parse(raw) as T : null;
+    } catch (e) {
+      console.error(`Failed to parse cache value for key ${key}:`, e);
+      return null;
     }
   }
 
-  async del(key: string): Promise<void> {
-    await this.client.del(key);
-  }
-
-  async exists(key: string): Promise<boolean> {
-    const result = await this.client.exists(key);
-    return result === 1;
+  async set<T>(key: string, value: T, ttlSeconds: number = 3600): Promise<void> {
+    const serialized = JSON.stringify(value);
+    await this.redis.set(key, serialized, 'EX', ttlSeconds);
   }
 
   async delete(key: string): Promise<void> {
-    await this.client.del(key);
+    await this.redis.del(key);
   }
 
   async clear(): Promise<void> {
-    const keys = await this.client.keys('*');
-    if (keys.length > 0) {
-      await this.client.del(keys);
-    }
+    await this.redis.flushdb();
   }
 
   async keys(pattern: string): Promise<string[]> {
-    return this.client.keys(pattern);
+    return await this.redis.keys(pattern);
   }
 
-  async getPlanetaryPositions(): Promise<any> {
-    // Placeholder for specific implementation
-    return null;
+  async exists(key: string): Promise<boolean> {
+    const result = await this.redis.exists(key);
+    return result === 1;
   }
 
-  async setPlanetaryPositions(positions: any): Promise<void> {
-    // Placeholder for specific implementation
+  async getPlanetaryPositions(): Promise<CelestialBody[] | null> {
+    return this.get<CelestialBody[]>('planetary_positions');
   }
 
-  async getBirthChart(id: string): Promise<any> {
-    // Placeholder for specific implementation
-    return null;
+  async setPlanetaryPositions(positions: CelestialBody[]): Promise<void> {
+    await this.set('planetary_positions', positions);
+  }
+
+  async getBirthChart(id: string): Promise<any | null> {
+    return this.get(`birth_chart:${id}`);
   }
 
   async setBirthChart(id: string, data: any): Promise<void> {
-    // Placeholder for specific implementation
+    await this.set(`birth_chart:${id}`, data);
   }
 
   async deleteBirthChart(id: string): Promise<void> {
-    // Placeholder for specific implementation
+    await this.delete(`birth_chart:${id}`);
   }
 
-  async getInsight(id: string): Promise<any> {
-    // Placeholder for specific implementation
-    return null;
+  async getInsight(id: string): Promise<any | null> {
+    return this.get(`insight:${id}`);
   }
 
   async setInsight(id: string, data: any): Promise<void> {
-    // Placeholder for specific implementation
+    await this.set(`insight:${id}`, data);
   }
 
   async deleteInsight(id: string): Promise<void> {
-    // Placeholder for specific implementation
+    await this.delete(`insight:${id}`);
   }
 
   async clearCache(): Promise<void> {
@@ -97,7 +87,7 @@ export class RedisClient implements ICacheClient {
 
   async healthCheck(): Promise<boolean> {
     try {
-      await this.client.ping();
+      await this.redis.ping();
       return true;
     } catch {
       return false;

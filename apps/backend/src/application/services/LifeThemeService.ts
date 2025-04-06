@@ -1,35 +1,52 @@
 import { Types } from 'mongoose';
-import { ICache } from '../infrastructure/cache/ICache';
-import { LifeTheme, LifeThemeAnalysis } from '../types/lifeTheme.types';
-import { NotFoundError } from '../types/errors';
+import { ICache } from '../../infrastructure/cache/ICache';
+import { LifeTheme } from '../../domain/types/lifeTheme.types';
+import { LifeThemeAnalysis } from '../../domain/types/lifeThemeAnalysis.types';
+import { NotFoundError } from '../../domain/errors';
 import { EphemerisService } from './EphemerisService';
 import { AIService } from './AIService';
-import { BirthChart as EphemerisBirthChart } from '../types/ephemeris.types';
+import { BirthChart } from '../../domain/types/ephemeris.types';
+import { BirthChartService } from './BirthChartService';
 
 export class LifeThemeService {
   constructor(
     private cache: ICache,
     private ephemerisService: EphemerisService,
+    private birthChartService: BirthChartService,
     private aiService: AIService
   ) {}
 
   async analyzeLifeThemes(birthChartId: string): Promise<LifeThemeAnalysis> {
     const cacheKey = `lifeTheme:${birthChartId}`;
-    const cached = await this.cache.get(cacheKey);
+    const cached = await this.cache.get<LifeThemeAnalysis>(cacheKey);
     if (cached) {
-      return cached as LifeThemeAnalysis;
+      return cached;
     }
 
-    const birthChart = await this.ephemerisService.getBirthChartById(birthChartId);
+    const birthChart = await this.birthChartService.getBirthChartById(birthChartId);
     if (!birthChart) {
       throw new NotFoundError('Birth chart not found');
     }
 
-    const calculatedBirthChart = await this.ephemerisService.calculateBirthChart(
+    const positions = await this.ephemerisService.getPlanetaryPositions(
       birthChart.datetime,
-      birthChart.location,
-      birthChart.houseSystem
+      birthChart.location.latitude,
+      birthChart.location.longitude
     );
+
+    const aspects = await this.ephemerisService.calculateAspects(positions);
+    const houses = await this.ephemerisService.calculateHouses(
+      birthChart.datetime,
+      birthChart.location.latitude,
+      birthChart.location.longitude
+    );
+
+    const calculatedBirthChart: BirthChart = {
+      ...birthChart,
+      positions,
+      aspects,
+      houses
+    };
 
     const themes = await this.generateLifeThemes(calculatedBirthChart);
 
@@ -45,38 +62,30 @@ export class LifeThemeService {
     return analysis;
   }
 
-  private async generateLifeThemes(birthChart: EphemerisBirthChart): Promise<LifeTheme> {
-    const sun = birthChart.bodies.find(b => b.id === 0);
-    const moon = birthChart.bodies.find(b => b.id === 1);
-    const ascendant = birthChart.angles.ascendant;
+  private async generateLifeThemes(birthChart: BirthChart): Promise<LifeTheme[]> {
+    const themes: LifeTheme[] = [];
 
-    if (!sun || !moon) {
-      throw new Error('Required celestial bodies not found in birth chart');
+    // Example logic:
+    if (birthChart.aspects.some(a => a.planet1 === 'Sun' && a.planet2 === 'Pluto' && a.aspect === 'Conjunction')) {
+      themes.push({
+        theme: 'Transformation & Empowerment',
+        description: 'You carry a deep capacity for inner transformation...',
+        influences: ['Sun conjunct Pluto'],
+        planetaryAspects: [
+          { planet: 'Sun', aspect: 'Conjunction Pluto', influence: 'Creates a profound inner force for renewal and rebirth' }
+        ]
+      });
     }
 
-    // Use AI service for analysis
-    const [strengths, challenges, patterns, lifeThemes, houseLords] = await Promise.all([
-      this.aiService.analyzeStrengths(birthChart),
-      this.aiService.analyzeChallenges(birthChart),
-      this.aiService.identifyPatterns(birthChart),
-      this.aiService.analyzeHouseThemes(birthChart),
-      this.aiService.analyzeHouseLords(birthChart)
-    ]);
+    return themes;
+  }
 
-    return {
-      coreIdentity: {
-        ascendant: this.getSignName(ascendant),
-        sunSign: this.getSignName(sun.longitude),
-        moonSign: this.getSignName(moon.longitude),
-        description: await this.aiService.generateCoreIdentityDescription(sun, moon, ascendant)
-      },
-      strengths,
-      challenges,
-      patterns,
-      lifeThemes,
-      houseLords,
-      overallSummary: await this.aiService.generateOverallSummary(strengths, challenges, patterns)
-    };
+  async generateLifeThemeInsights(birthChart: BirthChart): Promise<string> {
+    const themes = await this.generateLifeThemes(birthChart);
+    const insights = await Promise.all(
+      themes.map(theme => this.aiService.generateLifeThemeInsight(theme))
+    );
+    return insights.join('\n\n');
   }
 
   private getSignName(longitude: number): string {
@@ -104,7 +113,7 @@ export class LifeThemeService {
   }
 
   async getLifeThemesByUserId(userId: string): Promise<LifeThemeAnalysis[]> {
-    const birthCharts = await this.ephemerisService.getBirthChartsByUserId(userId);
+    const birthCharts = await this.birthChartService.getBirthChartsByUserId(userId);
     const analyses: LifeThemeAnalysis[] = [];
 
     for (const chart of birthCharts) {
@@ -117,14 +126,11 @@ export class LifeThemeService {
     return analyses;
   }
 
-  async updateLifeThemes(birthChartId: string, themes: Partial<LifeTheme>): Promise<LifeThemeAnalysis> {
+  async updateLifeThemes(birthChartId: string, themes: LifeTheme[]): Promise<LifeThemeAnalysis> {
     const analysis = await this.analyzeLifeThemes(birthChartId);
     const updatedAnalysis: LifeThemeAnalysis = {
       ...analysis,
-      themes: {
-        ...analysis.themes,
-        ...themes
-      },
+      themes,
       updatedAt: new Date()
     };
 

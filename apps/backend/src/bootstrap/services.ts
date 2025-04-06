@@ -1,14 +1,20 @@
 import { createInfrastructureLayer } from './infrastructure';
 import { createApplicationLayer } from './application';
+import { LifeThemeService } from '../application/services/LifeThemeService';
 
-// Initialize infrastructure and application layers
 const infrastructure = createInfrastructureLayer();
 const application = createApplicationLayer(infrastructure);
 
+const lifeThemeService = new LifeThemeService(
+  infrastructure.cacheClient,
+  application.ephemerisService,
+  application.aiService
+);
+
 export const services = {
   ...infrastructure,
-  ...application
+  ...application,
+  lifeThemeService,
 } as const;
 
-// Type-safe service accessor
-export type Services = typeof services; 
+export type Services = typeof services;
