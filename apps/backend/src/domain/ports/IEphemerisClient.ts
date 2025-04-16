@@ -1,3 +1,5 @@
+import { CelestialBody, DateTime, GeoPosition } from '../types/ephemeris.types';
+
 export interface CelestialPosition {
   longitude: number;
   latitude: number;
@@ -8,32 +10,9 @@ export interface CelestialPosition {
   isRetrograde: boolean;
 }
 
-export interface CelestialBody {
-  sun: CelestialPosition;
-  moon: CelestialPosition;
-  mercury: CelestialPosition;
-  venus: CelestialPosition;
-  mars: CelestialPosition;
-  jupiter: CelestialPosition;
-  saturn: CelestialPosition;
-  uranus: CelestialPosition;
-  neptune: CelestialPosition;
-  pluto: CelestialPosition;
-  chiron?: CelestialPosition;
-  northNode?: CelestialPosition;
-  southNode?: CelestialPosition;
-  name: string;
-  longitude: number;
-  latitude: number;
-  speed: number;
-  house?: number;
-  sign?: string;
-}
-
 export interface EphemerisRequest {
-  date: Date;
-  latitude: number;
-  longitude: number;
+  date: DateTime;
+  position: GeoPosition;
 }
 
 export interface AspectResponse {
@@ -51,7 +30,7 @@ export interface HouseResponse {
 }
 
 export interface IEphemerisClient {
-  calculatePositions(request: EphemerisRequest): Promise<CelestialBody>;
-  calculateAspects(positions: CelestialBody): Promise<AspectResponse[]>;
+  calculatePositions(request: EphemerisRequest): Promise<CelestialBody[]>;
+  calculateAspects(positions: CelestialBody[]): Promise<AspectResponse[]>;
   calculateHouses(request: EphemerisRequest): Promise<HouseResponse[]>;
 } 

@@ -1,6 +1,8 @@
 // Jest setup file
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
+import { createClient } from 'redis';
+import { logger } from '../shared/logger';
 import { RedisService } from '../infrastructure/redis';
 import { Request, Response, NextFunction } from 'express';
 import { IUser } from '../models/User';
@@ -21,21 +23,25 @@ jest.mock('../shared/middleware/auth', () => ({
   requireRole: (role: string) => (req: Request, res: Response, next: NextFunction) => next()
 }));
 
-let mongod: MongoMemoryServer;
+let mongoServer: MongoMemoryServer;
+let redisClient: ReturnType<typeof createClient>;
 let redisService: RedisService;
 
 // Increase timeout for database setup
 jest.setTimeout(60000);
 
-beforeAll(async () => {
+export const setupTestEnvironment = async (): Promise<void> => {
   try {
-    // Start in-memory MongoDB
-    mongod = await MongoMemoryServer.create();
-    const mongoUri = mongod.getUri();
-    
-    // Connect to MongoDB
+    // Start MongoDB memory server
+    mongoServer = await MongoMemoryServer.create();
+    const mongoUri = mongoServer.getUri();
     await mongoose.connect(mongoUri);
-    console.log('Connected to in-memory MongoDB');
+    logger.info('Connected to in-memory MongoDB');
+
+    // Initialize Redis client
+    redisClient = createClient({ url: 'redis://localhost:6379' });
+    await redisClient.connect();
+    logger.info('Connected to mock Redis');
 
     // Initialize Redis service with mock configuration
     redisService = new RedisService({
@@ -44,14 +50,54 @@ beforeAll(async () => {
       password: undefined,
       db: 0
     });
-    console.log('Connected to mock Redis');
 
-    console.log('Test database environment initialized');
+    logger.info('Test database environment initialized');
   } catch (error) {
-    console.error('Failed to initialize test environment:', error);
+    logger.error('Failed to initialize test environment:', error);
     throw error;
   }
-});
+};
+
+export const clearTestDatabases = async (): Promise<void> => {
+  try {
+    // Clear MongoDB collections
+    const collections = mongoose.connection.collections;
+    for (const key in collections) {
+      await collections[key].deleteMany({});
+    }
+    logger.info('MongoDB collections cleared');
+
+    // Clear Redis
+    await redisClient.flushAll();
+    logger.info('Redis cleared');
+
+    logger.info('Test databases cleared');
+  } catch (error) {
+    logger.error('Failed to clear test databases:', error);
+    throw error;
+  }
+};
+
+export const cleanupTestEnvironment = async (): Promise<void> => {
+  try {
+    // Close MongoDB connection
+    await mongoose.connection.close();
+    logger.info('MongoDB connection closed');
+
+    // Stop MongoDB memory server
+    await mongoServer.stop();
+    logger.info('MongoDB memory server stopped');
+
+    // Close Redis connection
+    await redisClient.quit();
+    logger.info('Redis connection closed');
+
+    logger.info('Test environment cleaned up');
+  } catch (error) {
+    logger.error('Failed to cleanup test environment:', error);
+    throw error;
+  }
+};
 
 afterEach(async () => {
   try {
@@ -80,7 +126,7 @@ afterAll(async () => {
     console.log('MongoDB connection closed');
 
     // Stop MongoDB memory server
-    await mongod.stop();
+    await mongoServer.stop();
     console.log('MongoDB memory server stopped');
 
     // Close Redis connection

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { UserService } from '../services/UserService';
-import { ValidationError, NotFoundError, AuthError } from '../types/errors';
-import { IUser } from '../models/User';
+import { UserService } from '../../application/services/UserService';
+import { ValidationError, NotFoundError, AuthError } from '../../domain/errors';
+import { IUser } from '../../domain/models/User';
 
 export class UserController {
   constructor(private userService: UserService) {}

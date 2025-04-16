@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { InsightService } from '../services/InsightService';
+import { InsightService } from '../application/services/InsightService';
 import { ValidationError, NotFoundError } from '../types/errors';
 import { InsightCategory, InsightAnalysis } from '../types/insight.types';
 
@@ -12,12 +12,14 @@ export class InsightController {
   public analyzeInsights = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { birthChartId } = req.params;
+      const { date } = req.query;
 
       if (!birthChartId) {
         throw new ValidationError('Birth chart ID is required');
       }
 
-      const analysis = await this.insightService.analyzeInsights(birthChartId);
+      const analysisDate = date ? new Date(date as string) : new Date();
+      const analysis = await this.insightService.analyzeInsights(birthChartId, analysisDate);
       res.status(200).json(analysis);
     } catch (error) {
       if (error instanceof ValidationError) {
@@ -243,6 +245,32 @@ export class InsightController {
 
       const insights = await this.insightService.getLifeThemeInsights(birthChartId);
       res.status(200).json(insights);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        res.status(400).json({ message: error.message });
+        return;
+      }
+      if (error instanceof NotFoundError) {
+        res.status(404).json({ message: error.message });
+        return;
+      }
+      next(error);
+    }
+  };
+
+  /**
+   * Generate daily insight
+   */
+  public generateDailyInsight = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { birthChartId } = req.params;
+
+      if (!birthChartId) {
+        throw new ValidationError('Birth chart ID is required');
+      }
+
+      const insight = await this.insightService.generateDailyInsight(birthChartId);
+      res.status(200).json({ insight });
     } catch (error) {
       if (error instanceof ValidationError) {
         res.status(400).json({ message: error.message });

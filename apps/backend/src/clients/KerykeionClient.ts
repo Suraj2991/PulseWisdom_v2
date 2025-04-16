@@ -1,73 +1,147 @@
-import { DateTime, GeoPosition, BirthChart, CelestialBody, HouseSystem } from '../types/ephemeris.types';
-import { TransitAspect, TransitWindow, TransitAnalysis } from '../types/transit.types';
-import axios, { AxiosInstance } from 'axios';
+import { DateTime, GeoPosition, BirthChart, CelestialBody, HouseSystem } from '../domain/types/ephemeris.types';
+import { Transit, TransitWindow, TransitAnalysis, TransitAspect } from '../domain/types/transit.types';
+import axios, { AxiosInstance, AxiosError } from 'axios';
+import { ServiceUnavailableError, CalculationError } from '../domain/errors';
+import { IEphemerisClient, EphemerisRequest, AspectResponse, HouseResponse } from '../domain/ports/IEphemerisClient';
+import { config } from '../shared/config';
+import { logger } from '../shared/logger';
 
-export class KerykeionClient {
-  private readonly client: AxiosInstance;
+export class KerykeionClient implements IEphemerisClient {
+  private client: AxiosInstance;
+  private maxRetries = 3;
+  private retryDelay = 1000; // 1 second
 
-  constructor(baseUrl: string) {
+  constructor() {
     this.client = axios.create({
-      baseURL: baseUrl,
-      timeout: 10000,
+      baseURL: config.ephemerisApiUrl,
+      timeout: config.ephemerisTimeoutMs,
       headers: {
+        'Authorization': `Bearer ${config.ephemerisApiKey}`,
         'Content-Type': 'application/json'
+      }
+    });
+    logger.info('KerykeionClient initialized');
+  }
+
+  async calculatePositions(request: EphemerisRequest): Promise<CelestialBody[]> {
+    return this.retryRequest(async () => {
+      try {
+        const response = await this.client.post('/positions', request);
+        return response.data;
+      } catch (error) {
+        throw await this.handleApiError(error);
       }
     });
   }
 
-  async calculateBirthChart(datetime: DateTime, location: GeoPosition, houseSystem: HouseSystem): Promise<BirthChart> {
-    const response = await this.client.post('/birth-chart', {
-      datetime,
-      location,
-      houseSystem
+  async calculateAspects(positions: CelestialBody[]): Promise<AspectResponse[]> {
+    return this.retryRequest(async () => {
+      try {
+        const response = await this.client.post('/aspects', { positions });
+        return response.data;
+      } catch (error) {
+        throw await this.handleApiError(error);
+      }
     });
-    return response.data;
+  }
+
+  async calculateHouses(request: EphemerisRequest): Promise<HouseResponse[]> {
+    return this.retryRequest(async () => {
+      try {
+        const response = await this.client.post('/houses', request);
+        return response.data;
+      } catch (error) {
+        throw await this.handleApiError(error);
+      }
+    });
+  }
+
+  async calculateBirthChart(datetime: DateTime, location: GeoPosition): Promise<BirthChart> {
+    return this.retryRequest(async () => {
+      try {
+        const response = await this.client.post('/birth-chart', {
+          datetime,
+          location
+        });
+        return response.data;
+      } catch (error) {
+        throw await this.handleApiError(error);
+      }
+    });
   }
 
   async calculateTransits(birthChart: BirthChart, date: DateTime): Promise<TransitAspect[]> {
-    const response = await this.client.post('/transits', {
-      birthChart,
-      date
+    return this.retryRequest(async () => {
+      try {
+        const response = await this.client.post('/transits', {
+          birthChart,
+          date
+        });
+        return response.data;
+      } catch (error) {
+        throw await this.handleApiError(error);
+      }
     });
-    return response.data;
   }
 
   async calculateTransitWindows(birthChart: BirthChart, date: DateTime): Promise<TransitWindow[]> {
-    const response = await this.client.post('/transit-windows', {
-      birthChart,
-      date
+    return this.retryRequest(async () => {
+      try {
+        const response = await this.client.post('/transit-windows', {
+          birthChart,
+          date
+        });
+        return response.data;
+      } catch (error) {
+        throw await this.handleApiError(error);
+      }
     });
-    return response.data;
   }
 
   async calculatePlanetaryPositions(date: DateTime): Promise<CelestialBody[]> {
-    const response = await this.client.post('/positions', {
-      date
-    });
-    return response.data;
+    try {
+      const response = await this.client.post('/positions', {
+        date
+      });
+      return response.data;
+    } catch (error) {
+      return this.handleApiError(error);
+    }
   }
 
   async calculateLunarPhases(startDate: DateTime, endDate: DateTime): Promise<any[]> {
-    const response = await this.client.post('/lunar-phases', {
-      startDate,
-      endDate
-    });
-    return response.data;
+    try {
+      const response = await this.client.post('/lunar-phases', {
+        startDate,
+        endDate
+      });
+      return response.data;
+    } catch (error) {
+      return this.handleApiError(error);
+    }
   }
 
   async calculateFixedStars(date: DateTime): Promise<any[]> {
-    const response = await this.client.post('/fixed-stars', {
-      date
-    });
-    return response.data;
+    try {
+      const response = await this.client.post('/fixed-stars', {
+        date
+      });
+      return response.data;
+    } catch (error) {
+      return this.handleApiError(error);
+    }
   }
 
   async calculateSignificantEvents(startDate: DateTime, endDate: DateTime): Promise<any[]> {
-    const response = await this.client.post('/significant-events', {
-      startDate,
-      endDate
-    });
-    return response.data;
+    try {
+      const response = await this.client.post('/significant-events', {
+        startDate,
+        endDate
+      });
+      return response.data;
+    } catch (error) {
+      return this.handleApiError(error);
+    }
   }
 
   async healthCheck(): Promise<boolean> {
@@ -77,5 +151,37 @@ export class KerykeionClient {
     } catch (error) {
       return false;
     }
+  }
+
+  private async retryRequest<T>(fn: () => Promise<T>): Promise<T> {
+    let lastError;
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        if (attempt < this.maxRetries) {
+          logger.warn(`Request failed, retrying (attempt ${attempt}/${this.maxRetries})...`, { error });
+          await new Promise(resolve => setTimeout(resolve, this.retryDelay * attempt));
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  private async handleApiError(error: any): Promise<never> {
+    logger.error('KerykeionClient API error:', { error });
+    
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      if (status === 400) {
+        throw new CalculationError('Invalid calculation parameters');
+      }
+      if (status && status >= 500) {
+        throw new ServiceUnavailableError('Kerykeion service is currently unavailable');
+      }
+    }
+    
+    throw new ServiceUnavailableError('Unexpected error occurred while communicating with Kerykeion service');
   }
 } 

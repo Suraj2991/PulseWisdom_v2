@@ -1,4 +1,45 @@
+export interface DateTime {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second?: number;
+  timezone?: string;
+}
+
+export interface GeoPosition {
+  latitude: number;
+  longitude: number;
+  altitude?: number;
+  placeName?: string;
+}
+
+export interface Houses {
+  system: string;
+  cusps: number[];
+}
+
+export interface Aspect {
+  body1: string;
+  body2: string;
+  type: string;
+  orb: number;
+  isApplying: boolean;
+}
+
 export interface BirthChart {
+  datetime: DateTime;
+  location: GeoPosition;
+  bodies: CelestialBody[];
+  houses: Houses;
+  aspects: Aspect[];
+  angles: {
+    ascendant: number;
+    midheaven: number;
+    descendant: number;
+    imumCoeli: number;
+  };
   sun: string;
   moon: string;
   ascendant: number;
@@ -7,12 +48,6 @@ export interface BirthChart {
     sign: string;
     house: number;
     degree: number;
-  }[];
-  aspects: {
-    planet1: string;
-    planet2: string;
-    aspect: string;
-    orb: number;
   }[];
   housePlacements: {
     house: number;
@@ -25,7 +60,6 @@ export interface BirthChart {
   };
   northNode: NodePlacement;
   southNode: NodePlacement;
-  // Add more fields as necessary
 }
 
 export interface NodePlacement {
@@ -63,4 +97,6 @@ export interface Pattern {
   description: string;
   planets: string[];
   houses: number[];
-} 
+}
+
+export type HouseSystem = 'Placidus' | 'Koch' | 'Porphyrius' | 'Regiomontanus' | 'Campanus' | 'Equal' | 'Whole Sign'; 

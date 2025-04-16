@@ -1,4 +1,4 @@
-import { CelestialBody } from '../../types/ephemeris.types';
+import { CelestialBody } from '../../domain/types/ephemeris.types';
 
 export interface ICache {
   connect(): Promise<void>;

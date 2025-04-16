@@ -1,5 +1,7 @@
 import { MongoClient, MongoClientOptions } from 'mongodb';
 import { createClient, RedisClientType } from 'redis';
+import { config } from '../../config';
+import { logger } from '../../shared/logger';
 
 // MongoDB Configuration
 export const mongoConfig = {
@@ -32,45 +34,47 @@ export const mongoClient = new MongoClient(mongoConfig.url, mongoConfig.options)
 export const redisClient = createClient(redisConfig) as RedisClientType;
 
 // Database connection functions
-export async function connectMongoDB() {
+export const connectMongoDB = async (): Promise<void> => {
   try {
-    await mongoClient.connect();
-    const db = mongoClient.db(mongoConfig.dbName);
-    // Test the connection
-    await db.command({ ping: 1 });
-    console.log('Connected to MongoDB');
-    return db;
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    throw error;
-  }
-}
-
-export async function connectRedis() {
-  try {
-    if (!redisClient.isOpen) {
-      await redisClient.connect();
-      // Test the connection
-      await redisClient.ping();
+    if (!process.env.MONGODB_URI) {
+      throw new Error('MONGODB_URI environment variable is not set');
     }
-    console.log('Connected to Redis');
-    return redisClient;
+
+    await mongoClient.connect();
+    logger.info('Connected to MongoDB');
   } catch (error) {
-    console.error('Redis connection error:', error);
+    logger.error('MongoDB connection error:', error);
     throw error;
   }
-}
+};
+
+export const connectRedis = async (): Promise<ReturnType<typeof createClient>> => {
+  try {
+    if (!process.env.REDIS_URL) {
+      throw new Error('REDIS_URL environment variable is not set');
+    }
+
+    const client = createClient({ url: process.env.REDIS_URL });
+    await client.connect();
+    logger.info('Connected to Redis');
+
+    client.on('error', (err) => {
+      logger.error('Redis client error:', err);
+    });
+
+    return client;
+  } catch (error) {
+    logger.error('Redis connection error:', error);
+    throw error;
+  }
+};
 
 // Graceful shutdown
-export async function closeConnections() {
+export const closeConnections = async (): Promise<void> => {
   try {
-    await Promise.allSettled([
-      mongoClient.close(true),
-      redisClient.isOpen ? redisClient.quit() : Promise.resolve()
-    ]);
-    console.log('Database connections closed');
+    await mongoClient.close();
+    logger.info('MongoDB connection closed');
   } catch (error) {
-    console.error('Error closing database connections:', error);
-    throw error;
+    logger.error('Error closing MongoDB connection:', error);
   }
-} 
+}; 

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthService } from '../services/AuthService';
-import { ValidationError, AuthError, NotFoundError } from '../types/errors';
-import { ChangePasswordData } from '../types/auth.types';
+import { AuthService } from '../../application/services/AuthService';
+import { ValidationError, AuthError, NotFoundError } from '../../domain/errors';
+import { ChangePasswordData } from '../../domain/types/auth.types';
 
 export class AuthController {
   constructor(private authService: AuthService) {}

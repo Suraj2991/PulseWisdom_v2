@@ -1,16 +1,21 @@
-import mongoose from 'mongoose';
-import { Db } from 'mongodb';
+import { MongoClient, Db } from 'mongodb';
 import { RedisClientType } from 'redis';
-import { connectRedis, closeConnections } from '../config/database';
+import { connectRedis, closeConnections } from '../shared/database';
+import { logger } from '../shared/logger';
+import { config } from '../shared/config';
+import { ConfigurationError } from '../domain/errors';
 
 type RedisClient = RedisClientType<Record<string, never>, Record<string, never>, Record<string, never>>;
 
 export class DatabaseService {
   private static instance: DatabaseService;
+  private mongoClient: MongoClient | null = null;
   private mongoDb: Db | null = null;
   private redisClient: RedisClient | null = null;
 
-  private constructor() {}
+  private constructor() {
+    logger.info('Database service initialized');
+  }
 
   public static getInstance(): DatabaseService {
     if (!DatabaseService.instance) {
@@ -20,39 +25,45 @@ export class DatabaseService {
   }
 
   public async initialize(): Promise<void> {
-    if (!process.env.MONGODB_URI) {
-      throw new Error('MONGODB_URI environment variable is not set');
+    try {
+      this.mongoClient = new MongoClient(config.mongoUri);
+      await this.mongoClient.connect();
+      this.mongoDb = this.mongoClient.db();
+      this.redisClient = await connectRedis() as RedisClient;
+      
+      logger.info('Database connections established successfully');
+    } catch (error) {
+      logger.error('Failed to initialize database connections', { error });
+      throw new ConfigurationError('Failed to initialize database connections');
     }
-
-    await mongoose.connect(process.env.MONGODB_URI);
-    if (!mongoose.connection.db) {
-      throw new Error('Failed to get MongoDB database instance');
-    }
-    this.mongoDb = mongoose.connection.db;
-    this.redisClient = await connectRedis() as RedisClient;
-    console.log('Database service initialized');
   }
 
   public getMongoDb(): Db {
     if (!this.mongoDb) {
-      throw new Error('MongoDB not initialized');
+      throw new ConfigurationError('MongoDB not initialized');
     }
     return this.mongoDb;
   }
 
   public getRedisClient(): RedisClient {
     if (!this.redisClient) {
-      throw new Error('Redis not initialized');
+      throw new ConfigurationError('Redis not initialized');
     }
     return this.redisClient;
   }
 
   public async shutdown(): Promise<void> {
-    await mongoose.connection.close();
-    this.mongoDb = null;
-    this.redisClient = null;
-    await closeConnections();
-    console.log('Database service shut down');
+    try {
+      if (this.mongoClient) {
+        await this.mongoClient.close();
+        logger.info('MongoDB connection closed');
+      }
+      await closeConnections();
+      logger.info('Redis connection closed');
+    } catch (error) {
+      logger.error('Error during database shutdown', { error });
+      throw new ConfigurationError('Failed to close database connections');
+    }
   }
 }
 

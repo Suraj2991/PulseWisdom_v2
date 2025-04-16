@@ -1,10 +1,16 @@
-import { BirthChartService } from '../services/BirthChartService';
-import { EphemerisService } from '../services/EphemerisService';
-import { TransitService } from '../services/TransitService';
-import { LifeThemeService } from '../services/LifeThemeService';
-import { AIService } from '../services/AIService';
-import { InsightService } from '../services/InsightService';
-import { RedisCache } from '../infrastructure/cache/RedisCache';
+import { BirthChartService } from '../../application/services/BirthChartService';
+import { EphemerisService } from '../../application/services/EphemerisService';
+import { TransitService } from '../../application/services/TransitService';
+import { LifeThemeService } from '../../application/services/LifeThemeService';
+import { AIService } from '../../application/services/AIService';
+import { InsightService } from '../../application/services/InsightService';
+import { ICache } from '../../infrastructure/cache/ICache';
+import { IUser } from '../../domain/models/User';
+
+export interface AppContext {
+  cache: ICache;
+  user?: IUser;
+}
 
 export interface Context {
   birthChartService: BirthChartService;
@@ -13,5 +19,4 @@ export interface Context {
   lifeThemeService: LifeThemeService;
   aiService: AIService;
   insightService: InsightService;
-  cache: RedisCache;
 } 

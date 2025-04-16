@@ -1,22 +1,70 @@
 import express, { Router } from 'express';
 import { UserController } from '../controllers/UserController';
-import { UserService } from '../services/UserService';
-import { authenticate } from '../shared/middleware/auth';
-import { RedisCache } from '../infrastructure/cache/RedisCache';
-import { EphemerisService } from '../services/EphemerisService';
-import { BirthChartService } from '../services/BirthChartService';
-import { validateRequest } from '../shared/middleware/validateRequest';
+import { UserService } from '../../application/services/UserService';
+import { createAuthMiddleware } from '../../shared/middleware/auth';
+import { RedisCache } from '../../infrastructure/cache/RedisCache';
+import { EphemerisService } from '../../application/services/EphemerisService';
+import { BirthChartService } from '../../application/services/BirthChartService';
+import { validateRequest } from '../../shared/middleware/validateRequest';
 import { z } from 'zod';
-import { errorHandler } from '../shared/middleware/errorHandler';
+import { errorHandler } from '../../shared/middleware/errorHandler';
+import { ICache } from '../../infrastructure/cache/ICache';
+import { EphemerisClient } from '../../infrastructure/clients/EphemerisClient';
+import { UserRepository } from '../../infrastructure/database/UserRepository';
+import { config } from '../../shared/config';
+
+// Add normalizeUserData middleware
+const normalizeUserData = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (req.body) {
+    // Normalize email
+    if (req.body.email) {
+      req.body.email = req.body.email.toLowerCase().trim();
+    }
+
+    // Normalize names
+    if (req.body.firstName) {
+      req.body.firstName = req.body.firstName.trim();
+    }
+    if (req.body.lastName) {
+      req.body.lastName = req.body.lastName.trim();
+    }
+
+    // Normalize birth location if present
+    if (req.body.birthLocation) {
+      if (req.body.birthLocation.placeName) {
+        req.body.birthLocation.placeName = req.body.birthLocation.placeName.trim();
+      }
+      if (req.body.birthLocation.latitude) {
+        req.body.birthLocation.latitude = Number(req.body.birthLocation.latitude);
+      }
+      if (req.body.birthLocation.longitude) {
+        req.body.birthLocation.longitude = Number(req.body.birthLocation.longitude);
+      }
+    }
+
+    // Normalize preferences if present
+    if (req.body.preferences) {
+      if (req.body.preferences.timezone) {
+        req.body.preferences.timezone = req.body.preferences.timezone.trim();
+      }
+      if (req.body.preferences.language) {
+        req.body.preferences.language = req.body.preferences.language.toLowerCase().trim();
+      }
+    }
+  }
+  next();
+};
 
 const router = Router();
 
 // Initialize services
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const redisUrl = config.redisUrl;
 const cache = new RedisCache(redisUrl);
-const ephemerisService = new EphemerisService(cache, process.env.EPHEMERIS_SERVICE_URL || 'http://localhost:3000');
+const ephemerisClient = new EphemerisClient(config.ephemerisApiUrl, config.ephemerisApiKey);
+const ephemerisService = new EphemerisService(ephemerisClient, cache);
 const birthChartService = new BirthChartService(cache, ephemerisService);
-const userService = new UserService(cache, birthChartService);
+const userRepository = new UserRepository();
+const userService = new UserService(cache, birthChartService, userRepository);
 const userController = new UserController(userService);
 
 // Health check endpoint
@@ -150,10 +198,10 @@ const updatePreferencesSchema = z.object({
 router.use(express.json());
 
 // Public routes
-router.post('/', validateRequest(createUserSchema), userController.createUser);
+router.post('/', normalizeUserData, validateRequest(createUserSchema), userController.createUser);
 
 // Protected routes
-router.use(authenticate);
+router.use(createAuthMiddleware(cache));
 
 // Profile route (should be before :userId routes)
 router.get('/profile', userController.getUserById);
@@ -181,6 +229,8 @@ router.get(
 
 router.put(
   '/:userId',
+  createAuthMiddleware(cache),
+  normalizeUserData,
   validateRequest(updateUserSchema),
   userController.updateUser
 );
@@ -194,6 +244,8 @@ router.delete(
 // User preferences routes
 router.put(
   '/:userId/preferences',
+  createAuthMiddleware(cache),
+  normalizeUserData,
   validateRequest(updatePreferencesSchema),
   userController.updatePreferences
 );

@@ -1,342 +1,162 @@
-import { Schema, model, Document } from 'mongoose';
+import { ObjectId } from 'mongodb';
 
-export interface IUser extends Document {
+export interface IUser {
+  _id?: ObjectId;
+  /** User's email address, used for login and communication */
   email: string;
+  /** Hashed password for authentication */
   password: string;
+  /** User's role in the system */
   role: 'user' | 'admin';
+  /** User's first name */
   firstName?: string;
+  /** User's last name */
   lastName?: string;
+  /** User's date of birth */
   birthDate: Date;
+  /** User's time of birth in HH:mm format */
   birthTime?: string;
+  /** User's birth location details */
   birthLocation: {
+    /** Latitude of birth location */
     latitude: number;
+    /** Longitude of birth location */
     longitude: number;
+    /** Name of the birth place */
     placeName: string;
   };
+  /** Whether the user's email has been verified */
   isEmailVerified: boolean;
+  /** Token for password reset */
   resetPasswordToken?: string;
+  /** Expiration date for password reset token */
   resetPasswordExpires?: Date;
+  /** Token for email verification */
   emailVerificationToken?: string;
+  /** Expiration date for email verification token */
   emailVerificationExpires?: Date;
+  /** User's preferences and settings */
   preferences: {
+    /** User's timezone */
     timezone: string;
+    /** Preferred house system for astrological calculations */
     houseSystem: 'placidus' | 'equal';
+    /** Orb size for aspect calculations */
     aspectOrbs: number;
+    /** Theme and display preferences */
     themePreferences: {
+      /** Color scheme preference */
       colorScheme: 'light' | 'dark';
+      /** Font size preference */
       fontSize: 'small' | 'medium' | 'large';
+      /** Whether to show aspects */
       showAspects: boolean;
+      /** Whether to show houses */
       showHouses: boolean;
+      /** Whether to show planets */
       showPlanets: boolean;
+      /** Whether to show retrogrades */
       showRetrogrades: boolean;
+      /** Whether to show lunar phases */
       showLunarPhases: boolean;
+      /** Whether to show eclipses */
       showEclipses: boolean;
+      /** Whether to show stations */
       showStations: boolean;
+      /** Whether to show heliacal events */
       showHeliacal: boolean;
+      /** Whether to show cosmic events */
       showCosmic: boolean;
     };
+    /** Insight generation preferences */
     insightPreferences: {
+      /** Categories of insights to generate */
       categories: string[];
+      /** Severity levels of insights to show */
       severity: ('high' | 'medium' | 'low')[];
+      /** Types of insights to generate */
       types: string[];
+      /** Whether to show retrograde insights */
       showRetrogrades: boolean;
+      /** Whether to show eclipse insights */
       showEclipses: boolean;
+      /** Whether to show station insights */
       showStations: boolean;
+      /** Whether to show heliacal insights */
       showHeliacal: boolean;
+      /** Whether to show cosmic insights */
       showCosmic: boolean;
+      /** Whether to receive daily insights */
       dailyInsights: boolean;
+      /** Whether to receive progression insights */
       progressionInsights: boolean;
+      /** Whether to receive life theme insights */
       lifeThemeInsights: boolean;
+      /** Whether to receive birth chart insights */
       birthChartInsights: boolean;
     };
+    /** Notification preferences */
     notificationPreferences: {
+      /** Email notification settings */
       email: {
-        dailyInsights: boolean;
-        eclipseAlerts: boolean;
-        retrogradeAlerts: boolean;
-        stationAlerts: boolean;
-        heliacalAlerts: boolean;
-        cosmicAlerts: boolean;
-      };
-      push: {
-        dailyInsights: boolean;
-        eclipseAlerts: boolean;
-        retrogradeAlerts: boolean;
-        stationAlerts: boolean;
-        heliacalAlerts: boolean;
-        cosmicAlerts: boolean;
-      };
-      frequency: 'daily' | 'weekly' | 'monthly';
-      quietHours: {
+        /** Whether to receive email notifications */
         enabled: boolean;
-        start: string; // Format: "HH:mm"
-        end: string;   // Format: "HH:mm"
+        /** Types of email notifications to receive */
+        types: string[];
+      };
+      /** Push notification settings */
+      push: {
+        /** Whether to receive push notifications */
+        enabled: boolean;
+        /** Types of push notifications to receive */
+        types: string[];
       };
     };
   };
+  /** User's activity history */
+  activityHistory: Array<{
+    /** Type of activity */
+    type: string;
+    /** Timestamp of the activity */
+    timestamp: Date;
+    /** Additional data about the activity */
+    data?: Record<string, unknown>;
+  }>;
+  /** User's subscription information */
+  subscription?: {
+    /** Type of subscription */
+    type: 'free' | 'premium' | 'enterprise';
+    /** Subscription start date */
+    startDate: Date;
+    /** Subscription end date */
+    endDate?: Date;
+    /** Whether the subscription is active */
+    isActive: boolean;
+    /** Subscription payment information */
+    payment?: {
+      /** Payment method */
+      method: string;
+      /** Last payment date */
+      lastPaymentDate: Date;
+      /** Next payment date */
+      nextPaymentDate?: Date;
+    };
+  };
+  /** User's API usage information */
+  apiUsage?: {
+    /** Number of API calls made */
+    calls: number;
+    /** Last API call timestamp */
+    lastCall: Date;
+    /** API call limit */
+    limit: number;
+  };
+  /** User's created timestamp */
   createdAt: Date;
+  /** User's last updated timestamp */
   updatedAt: Date;
+  /** Token for refreshing authentication */
+  refreshToken?: string;
 }
 
-const userSchema = new Schema<IUser>({
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    lowercase: true,
-  },
-  password: {
-    type: String,
-    required: true,
-  },
-  role: {
-    type: String,
-    enum: ['user', 'admin'],
-    default: 'user',
-  },
-  firstName: {
-    type: String,
-    trim: true,
-  },
-  lastName: {
-    type: String,
-    trim: true,
-  },
-  birthDate: {
-    type: Date,
-    required: true,
-  },
-  birthTime: {
-    type: String,
-    required: false,
-  },
-  birthLocation: {
-    latitude: {
-      type: Number,
-      required: true,
-    },
-    longitude: {
-      type: Number,
-      required: true,
-    },
-    placeName: {
-      type: String,
-      required: true,
-    },
-  },
-  isEmailVerified: {
-    type: Boolean,
-    default: false,
-  },
-  resetPasswordToken: {
-    type: String,
-    select: false,
-  },
-  resetPasswordExpires: {
-    type: Date,
-    select: false,
-  },
-  emailVerificationToken: {
-    type: String,
-    select: false,
-  },
-  emailVerificationExpires: {
-    type: Date,
-    select: false,
-  },
-  preferences: {
-    timezone: {
-      type: String,
-      required: true,
-      default: 'UTC',
-    },
-    houseSystem: {
-      type: String,
-      enum: ['placidus', 'equal'],
-      default: 'placidus',
-    },
-    aspectOrbs: {
-      type: Number,
-      required: true,
-      default: 8,
-    },
-    themePreferences: {
-      colorScheme: {
-        type: String,
-        enum: ['light', 'dark'],
-        default: 'light',
-      },
-      fontSize: {
-        type: String,
-        enum: ['small', 'medium', 'large'],
-        default: 'medium',
-      },
-      showAspects: {
-        type: Boolean,
-        default: true,
-      },
-      showHouses: {
-        type: Boolean,
-        default: true,
-      },
-      showPlanets: {
-        type: Boolean,
-        default: true,
-      },
-      showRetrogrades: {
-        type: Boolean,
-        default: true,
-      },
-      showLunarPhases: {
-        type: Boolean,
-        default: true,
-      },
-      showEclipses: {
-        type: Boolean,
-        default: true,
-      },
-      showStations: {
-        type: Boolean,
-        default: true,
-      },
-      showHeliacal: {
-        type: Boolean,
-        default: true,
-      },
-      showCosmic: {
-        type: Boolean,
-        default: true,
-      },
-    },
-    insightPreferences: {
-      categories: [{
-        type: String,
-        enum: ['personality', 'career', 'relationships', 'health', 'spirituality', 'life_purpose', 'challenges', 'opportunities', 'finances', 'personal_growth'],
-      }],
-      severity: [{
-        type: String,
-        enum: ['high', 'medium', 'low'],
-      }],
-      types: [{
-        type: String,
-        enum: ['PLANETARY_POSITION', 'HOUSE_POSITION', 'ASPECT', 'RETROGRADE', 'LUNAR_PHASE', 'SOLAR_ECLIPSE', 'LUNAR_ECLIPSE', 'STATION', 'HELIACAL', 'COSMIC', 'DAILY', 'PROGRESSION', 'LIFE_THEME', 'BIRTH_CHART'],
-      }],
-      showRetrogrades: {
-        type: Boolean,
-        default: true,
-      },
-      showEclipses: {
-        type: Boolean,
-        default: true,
-      },
-      showStations: {
-        type: Boolean,
-        default: true,
-      },
-      showHeliacal: {
-        type: Boolean,
-        default: true,
-      },
-      showCosmic: {
-        type: Boolean,
-        default: true,
-      },
-      dailyInsights: {
-        type: Boolean,
-        default: true,
-      },
-      progressionInsights: {
-        type: Boolean,
-        default: true,
-      },
-      lifeThemeInsights: {
-        type: Boolean,
-        default: true,
-      },
-      birthChartInsights: {
-        type: Boolean,
-        default: true,
-      },
-    },
-    notificationPreferences: {
-      email: {
-        dailyInsights: {
-          type: Boolean,
-          default: true,
-        },
-        eclipseAlerts: {
-          type: Boolean,
-          default: true,
-        },
-        retrogradeAlerts: {
-          type: Boolean,
-          default: true,
-        },
-        stationAlerts: {
-          type: Boolean,
-          default: true,
-        },
-        heliacalAlerts: {
-          type: Boolean,
-          default: true,
-        },
-        cosmicAlerts: {
-          type: Boolean,
-          default: true,
-        },
-      },
-      push: {
-        dailyInsights: {
-          type: Boolean,
-          default: true,
-        },
-        eclipseAlerts: {
-          type: Boolean,
-          default: true,
-        },
-        retrogradeAlerts: {
-          type: Boolean,
-          default: true,
-        },
-        stationAlerts: {
-          type: Boolean,
-          default: true,
-        },
-        heliacalAlerts: {
-          type: Boolean,
-          default: true,
-        },
-        cosmicAlerts: {
-          type: Boolean,
-          default: true,
-        },
-      },
-      frequency: {
-        type: String,
-        enum: ['daily', 'weekly', 'monthly'],
-        default: 'daily',
-      },
-      quietHours: {
-        enabled: {
-          type: Boolean,
-          default: false,
-        },
-        start: {
-          type: String,
-          match: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
-          default: '22:00',
-        },
-        end: {
-          type: String,
-          match: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
-          default: '07:00',
-        },
-      },
-    },
-  },
-}, {
-  timestamps: true,
-});
-
-export const User = model<IUser>('User', userSchema); 
+export type UserDocument = IUser & { _id: ObjectId }; 

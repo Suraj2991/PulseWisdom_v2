@@ -1,82 +1,44 @@
-import { Schema, model, Types } from 'mongoose';
+import { ObjectId } from 'mongodb';
 import { InsightType } from '../types/insight';
 import { CelestialBody } from '../types/ephemeris.types';
 
 export interface IInsight {
-  userId: Types.ObjectId;
-  birthChartId: Types.ObjectId;
+  /** Main content of the insight */
+  content: string;
+  /** Type of insight */
+  type: string;
+  /** Relevance score of the insight (0-1) */
+  relevance?: number;
+  /** Tags associated with the insight */
+  tags?: string[];
+  /** ID of the user who owns this insight */
+  userId: ObjectId;
+  /** ID of the birth chart this insight is based on */
+  birthChartId: ObjectId;
+  /** Detailed insights about celestial bodies and aspects */
   insights: Array<{
+    /** ID of the celestial body (if applicable) */
     bodyId?: number;
-    type: InsightType;
+    /** Type of insight for this body */
+    type: string;
+    /** Aspects involving this body (if applicable) */
     aspects?: Array<{
+      /** ID of the other body in the aspect */
       bodyId: number;
+      /** Type of aspect */
       type: string;
+      /** Orb of the aspect in degrees */
       orb: number;
     }>;
+    /** Description of the insight */
     description: string;
   }>;
+  /** Timestamp of when the insight was generated */
   timestamp: Date;
+  /** Document creation timestamp */
   createdAt: Date;
+  /** Document last update timestamp */
   updatedAt: Date;
 }
 
-const aspectSchema = new Schema({
-  bodyId: {
-    type: Number,
-    required: true
-  },
-  type: {
-    type: String,
-    required: true
-  },
-  orb: {
-    type: Number,
-    required: true
-  }
-}, { _id: false });
-
-const insightSchema = new Schema<IInsight>({
-  userId: {
-    type: Schema.Types.ObjectId,
-    required: true,
-    ref: 'User'
-  },
-  birthChartId: {
-    type: Schema.Types.ObjectId,
-    required: true,
-    ref: 'BirthChart'
-  },
-  insights: [{
-    bodyId: Number,
-    type: {
-      type: String,
-      enum: Object.values(InsightType),
-      required: true
-    },
-    aspects: [aspectSchema],
-    description: {
-      type: String,
-      required: true
-    }
-  }],
-  timestamp: {
-    type: Date,
-    required: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
-  }
-});
-
-insightSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
-
-export const InsightModel = model<IInsight>('Insight', insightSchema);
-export type Insight = IInsight; 
+export type InsightDocument = IInsight & { _id: ObjectId }; 

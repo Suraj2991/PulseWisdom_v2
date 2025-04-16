@@ -1,41 +1,37 @@
 import { DateTime, CelestialBody } from '../../shared/types/ephemeris.types';
+import { LifeTheme } from './lifeTheme.types';
+import { TransitAnalysis } from './transit.types';
+import { Planet } from '../../shared/types/ephemeris.types';
+import { Aspect } from '../../shared/types/ephemeris.types';
 
-export type InsightSeverity = 'high' | 'medium' | 'low';
+export enum InsightSeverity {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH'
+}
 
 export enum InsightCategory {
-  PERSONALITY = 'PERSONALITY',
-  CAREER = 'CAREER',
-  RELATIONSHIPS = 'RELATIONSHIPS',
-  HEALTH = 'HEALTH',
-  SPIRITUALITY = 'SPIRITUALITY',
-  LIFE_PURPOSE = 'LIFE_PURPOSE',
+  STRENGTHS = 'STRENGTHS',
   CHALLENGES = 'CHALLENGES',
   OPPORTUNITIES = 'OPPORTUNITIES',
+  GROWTH = 'GROWTH',
   FINANCES = 'FINANCES',
   PERSONAL_GROWTH = 'PERSONAL_GROWTH'
 }
 
 export enum InsightType {
-  // Core insight types
-  BIRTH_CHART = 'BIRTH_CHART',
-  TRANSIT = 'TRANSIT',
+  CORE_IDENTITY = 'CORE_IDENTITY',
+  ASPECT = 'ASPECT',
+  PATTERN = 'PATTERN',
   LIFE_THEME = 'LIFE_THEME',
+  TRANSIT = 'TRANSIT',
+  BIRTH_CHART = 'BIRTH_CHART',
   PLANETARY_POSITION = 'PLANETARY_POSITION',
   HOUSE_POSITION = 'HOUSE_POSITION',
-  
-  // Additional insight types
   DAILY = 'DAILY',
   WEEKLY = 'WEEKLY',
-  THEME_FORECAST = 'THEME_FORECAST',
-  
-  // Technical insight types
-  ASPECT = 'ASPECT',
-  RETROGRADE = 'RETROGRADE',
-  LUNAR_PHASE = 'LUNAR_PHASE',
-  SOLAR_ECLIPSE = 'SOLAR_ECLIPSE',
-  LUNAR_ECLIPSE = 'LUNAR_ECLIPSE',
-  STATION = 'STATION',
-  HELIACAL = 'HELIACAL',
+  MONTHLY = 'MONTHLY',
+  YEARLY = 'YEARLY',
   COSMIC = 'COSMIC'
 }
 
@@ -80,59 +76,81 @@ export interface HouseLord {
   aspects: string[];
 }
 
-// Base insight interface
 export interface BaseInsight {
   id: string;
   type: InsightType;
-  description: string;
   category: InsightCategory;
-  title: string;
   severity: InsightSeverity;
-  aspects: InsightAspect[];
-  houses: InsightHouse[];
-  supportingFactors: string[];
-  challenges: string[];
-  recommendations: string[];
+  title: string;
+  description: string;
   date: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  aspects?: Aspect[];
+  houses?: number[];
+  supportingFactors?: string[];
+  challenges?: string[];
+  recommendations?: string[];
 }
 
-// Specialized insight interfaces
-export interface AstrologicalInsight extends BaseInsight {
-  type: InsightType.PLANETARY_POSITION | InsightType.HOUSE_POSITION | InsightType.ASPECT | 
-        InsightType.RETROGRADE | InsightType.LUNAR_PHASE | InsightType.SOLAR_ECLIPSE | 
-        InsightType.LUNAR_ECLIPSE | InsightType.STATION | InsightType.HELIACAL | InsightType.COSMIC;
-  bodyId?: number;
-  dignity?: Dignity;
+export interface CoreIdentityInsight extends BaseInsight {
+  type: InsightType.CORE_IDENTITY;
+  sunSign: string;
+  moonSign: string;
+  ascendantSign: string;
 }
 
-export interface TemporalInsight extends BaseInsight {
-  type: InsightType.DAILY | InsightType.WEEKLY | InsightType.TRANSIT | InsightType.THEME_FORECAST;
-  dateRange?: {
-    start: DateTime;
-    end: DateTime;
-  };
+export interface AspectInsight extends BaseInsight {
+  type: InsightType.ASPECT;
+  aspectType: string;
+  planet1Id: number;
+  planet2Id: number;
+}
+
+export interface PatternInsight extends BaseInsight {
+  type: InsightType.PATTERN;
+  patternType: string;
+  planets: Planet[];
 }
 
 export interface LifeThemeInsight extends BaseInsight {
   type: InsightType.LIFE_THEME;
+  themeId: string;
+}
+
+export interface TransitInsight extends BaseInsight {
+  type: InsightType.TRANSIT;
+  transitId: string;
 }
 
 export interface BirthChartInsight extends BaseInsight {
   type: InsightType.BIRTH_CHART;
+  chartId: string;
 }
 
-// Union type for all insights
-export type Insight = AstrologicalInsight | TemporalInsight | LifeThemeInsight | BirthChartInsight;
+export type Insight = CoreIdentityInsight | AspectInsight | PatternInsight | LifeThemeInsight | TransitInsight | BirthChartInsight;
 
 export interface InsightAnalysis {
   birthChartId: string;
   userId: string;
+  content: string;
+  type: string;
+  relevance?: number;
+  tags?: string[];
+  status?: 'pending' | 'reviewed' | 'addressed';
   insights: Insight[];
   overallSummary: string;
   createdAt: Date;
   updatedAt: Date;
+  planets?: Array<{
+    id: number;
+    name: string;
+    sign: string;
+    house: number;
+    degree: number;
+    retrograde: boolean;
+  }>;
+  aspects?: InsightAspect[];
+  lifeThemes?: LifeTheme[];
+  transits?: TransitAnalysis[];
 }
 
 export interface InsightOptions {

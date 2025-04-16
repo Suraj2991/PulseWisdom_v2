@@ -65,4 +65,22 @@ export interface BirthChart {
     aspect: string;
     orb: number;
   }>;
+}
+
+export interface Planet {
+  id: number;
+  name: string;
+  sign: string;
+  house: number;
+  degree: number;
+  retrograde: boolean;
+}
+
+export interface Aspect {
+  body1Id: number;
+  body2Id: number;
+  type: string;
+  angle: number;
+  orb: number;
+  isApplying: boolean;
 } 

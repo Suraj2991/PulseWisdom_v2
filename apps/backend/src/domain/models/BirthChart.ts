@@ -1,73 +1,47 @@
-import mongoose, { Document } from 'mongoose';
-import { DateTime, GeoPosition, HouseSystem, CelestialBody } from '../types/ephemeris.types';
+import { DateTime, GeoPosition, CelestialBody } from '../types/ephemeris.types';
+import { HouseSystem, HOUSE_SYSTEMS } from '../../shared/constants/astrology';
+import { ObjectId } from 'mongodb';
 
-export interface IBirthChart extends Document {
+export interface IBirthChart {
+  /** ID of the user who owns this birth chart */
   userId: string;
+  /** Date and time of birth */
   datetime: DateTime;
+  /** Geographic location of birth */
   location: GeoPosition;
+  /** House system used for calculations */
   houseSystem: HouseSystem;
+  /** List of celestial bodies and their positions */
   bodies: CelestialBody[];
+  /** List of aspects between celestial bodies */
+  aspects: Array<{
+    body1: string;
+    body2: string;
+    type: string;
+    orb: number;
+  }>;
+  /** Important angles in the chart */
   angles: {
+    /** Ascendant degree */
     ascendant: number;
+    /** Midheaven degree */
     mc: number;
+    /** Imum Coeli degree */
     ic: number;
+    /** Descendant degree */
     descendant: number;
   };
+  /** House system details */
   houses: {
+    /** House cusps in degrees */
     cusps: number[];
+    /** House system name */
     system: string;
   };
+  /** Document creation timestamp */
   createdAt: Date;
+  /** Document last update timestamp */
   updatedAt: Date;
 }
 
-const birthChartSchema = new mongoose.Schema<IBirthChart>({
-  userId: {
-    type: String,
-    required: true,
-    index: true
-  },
-  datetime: {
-    type: Object,
-    required: true
-  },
-  location: {
-    type: Object,
-    required: true
-  },
-  houseSystem: {
-    type: String,
-    enum: Object.values(HouseSystem),
-    default: HouseSystem.PLACIDUS
-  },
-  bodies: [{
-    id: { type: Number, required: true },
-    name: { type: String },
-    longitude: { type: Number, required: true },
-    latitude: { type: Number, required: true },
-    speed: { type: Number, required: true },
-    house: { type: Number },
-    sign: { type: String },
-    signLongitude: { type: Number },
-    isRetrograde: { type: Boolean }
-  }],
-  angles: {
-    ascendant: { type: Number, required: true },
-    mc: { type: Number, required: true },
-    ic: { type: Number, required: true },
-    descendant: { type: Number, required: true }
-  },
-  houses: {
-    cusps: [{ type: Number, required: true }],
-    system: { type: String, required: true }
-  }
-}, {
-  timestamps: true
-});
-
-// Indexes
-birthChartSchema.index({ userId: 1, datetime: 1 });
-birthChartSchema.index({ 'bodies.id': 1 });
-birthChartSchema.index({ 'bodies.sign': 1 });
-
-export const BirthChartModel = mongoose.model<IBirthChart>('BirthChart', birthChartSchema); 
+export type BirthChartDocument = IBirthChart & { _id: ObjectId }; 

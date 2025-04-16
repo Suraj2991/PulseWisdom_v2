@@ -1,155 +1,226 @@
-import { ICache } from '../infrastructure/cache/ICache';
+import { ICache } from '../../infrastructure/cache/ICache';
 import { EphemerisService } from './EphemerisService';
-import { BirthChart, DateTime, GeoPosition, HouseSystem } from '../types/ephemeris.types';
-import { IBirthChart } from '../models/BirthChart';
-import { NotFoundError, ValidationError } from '../types/errors';
-import { BirthChartModel } from '../models/BirthChart';
-import { Types } from 'mongoose';
+import { DateTime, GeoPosition, CelestialBody, Houses } from '../../domain/types/ephemeris.types';
+import { HouseSystem, HOUSE_SYSTEMS } from '../../shared/constants/astrology';
+import { ObjectId } from 'mongodb';
+import { IBirthChart, BirthChartDocument } from '../../domain/models/BirthChart';
+import { NotFoundError, ValidationError, DatabaseError, CacheError, AppError, ServiceError } from '../../domain/errors';
+import { Validator } from '../../shared/validation';
+import { logger } from '../../shared/logger';
+import { ValidationUtils } from '../../shared/utils/validation';
+import { CacheUtils } from '../../infrastructure/cache/CacheUtils';
+import { BirthChartModel } from '../../infrastructure/database/models/BirthChart';
 
 export class BirthChartService {
+  private readonly CACHE_PREFIX = 'birthChart:';
+  private readonly CACHE_TTL = 3600; // 1 hour in seconds
+
   constructor(
-    private cache: ICache,
-    private ephemerisService: EphemerisService
+    private readonly cache: ICache,
+    private readonly ephemerisService: EphemerisService
   ) {}
 
-  private validateLocation(location: GeoPosition): void {
-    if (location.latitude < -90 || location.latitude > 90) {
-      throw new ValidationError('Invalid latitude. Must be between -90 and 90 degrees.');
+  private logInfo(message: string, context: Record<string, unknown>): void {
+    logger.info(message, context);
+  }
+
+  private logDebug(message: string, context: Record<string, unknown>): void {
+    logger.debug(message, context);
+  }
+
+  private logError(message: string, error: Error): void {
+    logger.error(message, { error });
+  }
+
+  private handleError(error: Error, context: string): never {
+    this.logError(`Failed to ${context}`, error);
+    if (error instanceof AppError) {
+      throw error;
     }
-    if (location.longitude < -180 || location.longitude > 180) {
-      throw new ValidationError('Invalid longitude. Must be between -180 and 180 degrees.');
+    throw new ServiceError(`Failed to ${context}: ${error.message}`);
+  }
+
+  private validateLocation(location: GeoPosition): void {
+    if (!location.latitude || !location.longitude) {
+      throw new ValidationError('Invalid location coordinates');
     }
   }
 
   private validateDateTime(datetime: DateTime): void {
-    // Set default timezone if not provided
-    if (!datetime.timezone) {
-      datetime.timezone = 'UTC';
-    }
-    
-    // Validate month
-    if (datetime.month < 1 || datetime.month > 12) {
-      throw new ValidationError('Invalid month. Must be between 1 and 12.');
-    }
-    
-    // Validate day based on month
-    const daysInMonth = new Date(datetime.year, datetime.month, 0).getDate();
-    if (datetime.day < 1 || datetime.day > daysInMonth) {
-      throw new ValidationError(`Invalid day. Must be between 1 and ${daysInMonth} for month ${datetime.month}.`);
-    }
-    
-    // Validate time components
-    if (datetime.hour < 0 || datetime.hour > 23) {
-      throw new ValidationError('Invalid hour. Must be between 0 and 23.');
-    }
-    if (datetime.minute < 0 || datetime.minute > 59) {
-      throw new ValidationError('Invalid minute. Must be between 0 and 59.');
-    }
-    if (datetime.second < 0 || datetime.second > 59) {
-      throw new ValidationError('Invalid second. Must be between 0 and 59.');
+    if (!datetime.year || !datetime.month || !datetime.day || !datetime.hour || !datetime.minute) {
+      throw new ValidationError('Invalid datetime format');
     }
   }
 
   private validateObjectId(id: string): void {
-    if (!Types.ObjectId.isValid(id)) {
+    if (!ObjectId.isValid(id)) {
       throw new ValidationError('Invalid ID format');
     }
   }
 
-  async getBirthChartById(birthChartId: string): Promise<IBirthChart | null> {
-    this.validateObjectId(birthChartId);
-    const cacheKey = `birthChart:${birthChartId}`;
-    const cached = await this.cache.get(cacheKey);
-    if (cached) {
-      return cached as IBirthChart;
+  private async getCachedBirthChart(id: string): Promise<BirthChartDocument | null> {
+    try {
+      return await this.cache.get<BirthChartDocument>(`${this.CACHE_PREFIX}${id}`);
+    } catch (error) {
+      this.logError('Failed to get cached birth chart', error as Error);
+      return null;
     }
-
-    const birthChart = await this.ephemerisService.getBirthChartById(birthChartId);
-    if (birthChart) {
-      await this.cache.set(cacheKey, birthChart, 3600);
-    }
-    return birthChart;
   }
 
-  async getBirthChartsByUserId(userId: string): Promise<IBirthChart[]> {
-    this.validateObjectId(userId);
-    const cacheKey = `birthCharts:${userId}`;
-    const cached = await this.cache.get(cacheKey);
-    if (cached) {
-      return cached as IBirthChart[];
+  private async cacheBirthChart(id: string, birthChart: BirthChartDocument): Promise<void> {
+    try {
+      await this.cache.set(`${this.CACHE_PREFIX}${id}`, birthChart, this.CACHE_TTL);
+      this.logDebug('Cached birth chart', { id });
+    } catch (error) {
+      this.logError('Failed to cache birth chart', error as Error);
     }
-
-    const birthCharts = await this.ephemerisService.getBirthChartsByUserId(userId);
-    await this.cache.set(cacheKey, birthCharts, 3600);
-    return birthCharts;
   }
 
-  async calculateBirthChart(datetime: DateTime, location: GeoPosition, houseSystem: HouseSystem = HouseSystem.PLACIDUS): Promise<BirthChart> {
-    this.validateLocation(location);
-    this.validateDateTime(datetime);
-    return this.ephemerisService.calculateBirthChart(datetime, location, houseSystem);
+  private async deleteCachedBirthChart(id: string): Promise<void> {
+    try {
+      await this.cache.delete(`${this.CACHE_PREFIX}${id}`);
+    } catch (error) {
+      this.logError('Failed to delete cached birth chart', error as Error);
+    }
   }
 
-  async createBirthChart(userId: string, datetime: DateTime, location: GeoPosition): Promise<IBirthChart> {
-    this.validateLocation(location);
-    this.validateObjectId(userId);
-    this.validateDateTime(datetime);
-    const birthChart = await this.ephemerisService.calculateBirthChart(datetime, location);
-    const newBirthChart = await BirthChartModel.create({
-      userId,
-      datetime,
-      location,
-      houseSystem: HouseSystem.PLACIDUS
-    });
-    await this.cache.set(`birthChart:${newBirthChart._id}`, newBirthChart, 3600);
-    return newBirthChart;
+  async getBirthChartById(id: string): Promise<BirthChartDocument | null> {
+    try {
+      this.logInfo('Getting birth chart by ID', { id });
+      this.validateObjectId(id);
+      
+      const cachedChart = await this.getCachedBirthChart(id);
+      if (cachedChart) {
+        return cachedChart;
+      }
+      
+      const birthChart = await BirthChartModel.findById(id);
+      if (birthChart) {
+        await this.cacheBirthChart(id, birthChart);
+      }
+      return birthChart;
+    } catch (error) {
+      this.handleError(error as Error, 'get birth chart by ID');
+    }
+  }
+
+  async getBirthChartsByUserId(userId: string): Promise<BirthChartDocument[]> {
+    try {
+      this.logInfo('Getting birth charts by user ID', { userId });
+      this.validateObjectId(userId);
+      
+      return await BirthChartModel.find({ userId });
+    } catch (error) {
+      this.handleError(error as Error, 'get birth charts by user ID');
+    }
+  }
+
+  async calculateBirthChart(datetime: DateTime, location: GeoPosition): Promise<{
+    bodies: CelestialBody[];
+    houses: Houses;
+    aspects: Array<{
+      body1: string;
+      body2: string;
+      type: string;
+      orb: number;
+    }>;
+    angles: {
+      ascendant: number;
+      midheaven: number;
+      descendant: number;
+      imumCoeli: number;
+    };
+  }> {
+    try {
+      this.logInfo('Calculating birth chart', { datetime, location });
+      this.validateLocation(location);
+      this.validateDateTime(datetime);
+      
+      return await this.ephemerisService.calculateBirthChart(datetime, location);
+    } catch (error) {
+      this.handleError(error as Error, 'calculate birth chart');
+    }
+  }
+
+  async createBirthChart(userId: string, datetime: DateTime, location: GeoPosition): Promise<BirthChartDocument> {
+    try {
+      this.logInfo('Creating birth chart', { userId, datetime, location });
+      this.validateLocation(location);
+      this.validateObjectId(userId);
+      this.validateDateTime(datetime);
+      
+      const birthChart = await this.ephemerisService.calculateBirthChart(datetime, location);
+      const newBirthChart = await BirthChartModel.create({
+        userId,
+        datetime,
+        location,
+        houseSystem: HOUSE_SYSTEMS.PLACIDUS,
+        bodies: birthChart.bodies,
+        houses: birthChart.houses,
+        aspects: birthChart.aspects,
+        angles: {
+          ascendant: birthChart.angles.ascendant,
+          mc: birthChart.angles.midheaven,
+          ic: birthChart.angles.imumCoeli,
+          descendant: birthChart.angles.descendant
+        }
+      });
+      
+      await this.cacheBirthChart((newBirthChart as any)._id.toString(), newBirthChart);
+      return newBirthChart;
+    } catch (error) {
+      this.handleError(error as Error, 'create birth chart');
+    }
   }
 
   async updateBirthChart(birthChartId: string, updateData: Partial<IBirthChart>): Promise<IBirthChart> {
-    this.validateObjectId(birthChartId);
-    
-    if (updateData.datetime) {
-      this.validateDateTime(updateData.datetime as DateTime);
+    try {
+      this.logInfo('Updating birth chart', { birthChartId, updateData });
+      this.validateObjectId(birthChartId);
+      
+      if (updateData.datetime) {
+        this.validateDateTime(updateData.datetime as DateTime);
+      }
+      
+      if (updateData.userId) {
+        this.validateObjectId(updateData.userId);
+      }
+
+      if (updateData.location) {
+        this.validateLocation(updateData.location);
+      }
+
+      const birthChart = await BirthChartModel.findById(birthChartId);
+      if (!birthChart) {
+        throw new NotFoundError('Birth chart not found');
+      }
+
+      const updatedBirthChart = await BirthChartModel.update(birthChartId, updateData);
+      if (!updatedBirthChart) {
+        throw new NotFoundError('Birth chart not found');
+      }
+
+      await this.deleteCachedBirthChart(birthChartId);
+      await this.cacheBirthChart(birthChartId, updatedBirthChart);
+
+      return updatedBirthChart;
+    } catch (error) {
+      this.handleError(error as Error, 'update birth chart');
     }
-    
-    if (updateData.userId) {
-      this.validateObjectId(updateData.userId);
-    }
-
-    if (updateData.location) {
-      this.validateLocation(updateData.location);
-    }
-
-    const birthChart = await this.ephemerisService.getBirthChartById(birthChartId);
-    if (!birthChart) {
-      throw new NotFoundError('Birth chart not found');
-    }
-
-    const updatedBirthChart = await BirthChartModel.findByIdAndUpdate(
-      birthChartId,
-      { $set: updateData },
-      { new: true }
-    );
-
-    if (!updatedBirthChart) {
-      throw new NotFoundError('Birth chart not found');
-    }
-
-    await this.cache.delete(`birthChart:${birthChartId}`);
-    await this.cache.set(
-      `birthChart:${birthChartId}`,
-      updatedBirthChart,
-      3600 // 1 hour
-    );
-
-    return updatedBirthChart;
   }
 
   async deleteBirthChart(birthChartId: string): Promise<boolean> {
-    const result = await BirthChartModel.findByIdAndDelete(birthChartId);
-    if (result) {
-      await this.cache.delete(`birthChart:${birthChartId}`);
+    try {
+      this.logInfo('Deleting birth chart', { birthChartId });
+      this.validateObjectId(birthChartId);
+
+      const result = await BirthChartModel.delete(birthChartId);
+      if (result) {
+        await this.deleteCachedBirthChart(birthChartId);
+      }
+      return result;
+    } catch (error) {
+      this.handleError(error as Error, 'delete birth chart');
     }
-    return !!result;
   }
 } 

@@ -1,13 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthService } from '../../services/AuthService';
-import { AppError, AuthError } from '../../types/errors';
-import { IUser } from '../../models/User';
+import { AuthService } from '../../application/services/AuthService';
+import { AppError, AuthError } from '../../domain/errors';
+import { IUser } from '../../domain/models/User';
 import { ICache } from '../../infrastructure/cache/ICache';
 import { RedisCache } from '../../infrastructure/cache/RedisCache';
-import { CelestialBody } from '../../types/ephemeris.types';
-import { UserService } from '../../services/UserService';
-import { BirthChartService } from '../../services/BirthChartService';
-import { EphemerisService } from '../../services/EphemerisService';
+import { CelestialBody } from '../../domain/types/ephemeris.types';
+import { UserService } from '../../application/services/UserService';
+import { BirthChartService } from '../../application/services/BirthChartService';
+import { EphemerisService } from '../../application/services/EphemerisService';
+import jwt from 'jsonwebtoken';
+import { UserRepository } from '../../infrastructure/database/UserRepository';
 
 declare global {
   namespace Express {
@@ -98,23 +100,29 @@ class MockCache implements ICache {
   }
 }
 
-export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return next(new AuthError('Authentication required'));
-    }
+export const createAuthMiddleware = (cache: ICache) => {
+  const userRepository = new UserRepository(cache);
+  const authService = new AuthService(cache, userRepository);
 
-    const token = authHeader.split(' ')[1];
-    const user = await authService.validateToken(token);
-    req.user = user;
-    next();
-  } catch (error) {
-    if (error instanceof AuthError) {
-      return next(error);
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      
+      if (!token) {
+        throw new AppError('No token provided', 401);
+      }
+
+      const user = await authService.validateToken(token);
+      if (!user) {
+        throw new AppError('Invalid token', 401);
+      }
+
+      req.user = user;
+      next();
+    } catch (error) {
+      next(error);
     }
-    return next(new AuthError('Authentication required'));
-  }
+  };
 };
 
 export const requireRole = (role: string) => {

@@ -1,30 +1,73 @@
 import express from 'express';
 import { InsightController } from '../controllers/InsightController';
-import { InsightService } from '../services/InsightService';
-import { authenticate } from '../shared/middleware/auth';
-import { RedisCache } from '../infrastructure/cache/RedisCache';
-import { BirthChartService } from '../services/BirthChartService';
-import { LifeThemeService } from '../services/LifeThemeService';
-import { TransitService } from '../services/TransitService';
-import { EphemerisService } from '../services/EphemerisService';
-import { AIService } from '../services/AIService';
-import { validateRequest } from '../shared/middleware/validateRequest';
+import { InsightService } from '../../application/services/InsightService';
+import { RedisCache } from '../../infrastructure/cache/RedisCache';
+import { BirthChartService } from '../../application/services/BirthChartService';
+import { LifeThemeService } from '../../application/services/LifeThemeService';
+import { TransitService } from '../../application/services/TransitService';
+import { EphemerisService } from '../../application/services/EphemerisService';
+import { AIService } from '../../application/services/AIService';
+import { validateRequest } from '../../shared/middleware/validateRequest';
 import { z } from 'zod';
+import { Router } from 'express';
+import { InsightGenerator } from '../../application/services/insight/InsightGenerator';
+import { InsightRepository } from '../../application/services/insight/InsightRepository';
+import { InsightAnalyzer } from '../../application/services/insight/InsightAnalyzer';
+import { ICache } from '../../infrastructure/cache/ICache';
+import { Sanitizer } from '../../shared/sanitization';
+import { EphemerisClient } from '../../infrastructure/clients/EphemerisClient';
+import { LLMClient } from '../../infrastructure/ai/LLMClient';
+import { PromptBuilder } from '../../utils/PromptBuilder';
+import { authenticate } from '../middleware/auth';
+import { config } from '../../shared/config';
 
 const router = express.Router();
 const cache = new RedisCache('redis://localhost:6379');
-const ephemerisService = new EphemerisService(cache, 'http://localhost:3000');
+const ephemerisClient = new EphemerisClient(config.ephemerisApiUrl, config.ephemerisApiKey);
+const ephemerisService = new EphemerisService(ephemerisClient, cache);
 const birthChartService = new BirthChartService(cache, ephemerisService);
-const aiService = new AIService();
-const lifeThemeService = new LifeThemeService(cache, ephemerisService, aiService);
-const transitService = new TransitService(cache, ephemerisService);
-const insightService = new InsightService(cache, ephemerisService, lifeThemeService);
+const llmClient = new LLMClient(config.openaiApiKey);
+const aiService = new AIService(llmClient, PromptBuilder, cache);
+const lifeThemeService = new LifeThemeService(cache, birthChartService, aiService);
+const transitService = new TransitService(ephemerisClient, cache, birthChartService);
+const insightGenerator = new InsightGenerator(aiService);
+const insightRepository = new InsightRepository(cache);
+const insightAnalyzer = new InsightAnalyzer(lifeThemeService, transitService);
+
+const insightService = new InsightService(
+  cache,
+  ephemerisService,
+  lifeThemeService,
+  birthChartService,
+  transitService,
+  aiService,
+  insightGenerator,
+  insightRepository,
+  insightAnalyzer
+);
+
 const insightController = new InsightController(insightService);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', service: 'insights' });
 });
+
+// Normalize and sanitize insight input
+const normalizeInsightInput = (req: any, res: any, next: any) => {
+  if (req.body.insights) {
+    req.body.insights = req.body.insights.map((insight: any) => ({
+      ...insight,
+      title: insight.title ? Sanitizer.sanitizeString(insight.title) : insight.title,
+      description: insight.description ? Sanitizer.sanitizeInsightContent(insight.description) : insight.description,
+      recommendations: insight.recommendations?.map((rec: string) => Sanitizer.sanitizeString(rec))
+    }));
+  }
+  if (req.body.overallSummary) {
+    req.body.overallSummary = Sanitizer.sanitizeInsightContent(req.body.overallSummary);
+  }
+  next();
+};
 
 // Validation schemas
 const birthChartIdSchema = z.object({
@@ -76,68 +119,9 @@ const updateInsightsSchema = z.object({
   })
 });
 
-// Analyze insights for a birth chart
-router.get(
-  '/analyze/:birthChartId',
-  authenticate,
-  validateRequest(birthChartIdSchema),
-  insightController.analyzeInsights
-);
-
-// Get insights by user ID
-router.get(
-  '/user/:userId',
-  authenticate,
-  validateRequest(userIdSchema),
-  insightController.getInsightsByUserId
-);
-
-// Get insights by category
-router.get(
-  '/category/:birthChartId',
-  authenticate,
-  validateRequest(categorySchema),
-  insightController.getInsightsByCategory
-);
-
-// Update insights
-router.put(
-  '/:birthChartId',
-  authenticate,
-  validateRequest(updateInsightsSchema),
-  insightController.updateInsights
-);
-
-// Get birth chart insights
-router.get(
-  '/birthChart/:birthChartId',
-  authenticate,
-  validateRequest(birthChartIdSchema),
-  insightController.getBirthChartInsights
-);
-
-// Get insights by date range
-router.get(
-  '/dateRange/:birthChartId',
-  authenticate,
-  validateRequest(dateRangeSchema),
-  insightController.getInsightsByDateRange
-);
-
-// Get transit insights
-router.get(
-  '/transit/:birthChartId',
-  authenticate,
-  validateRequest(birthChartIdSchema),
-  insightController.getTransitInsights
-);
-
-// Get life theme insights
-router.get(
-  '/lifeTheme/:birthChartId',
-  authenticate,
-  validateRequest(birthChartIdSchema),
-  insightController.getLifeThemeInsights
-);
+// Routes
+router.get('/:birthChartId', authenticate, validateRequest(birthChartIdSchema), insightController.analyzeInsights);
+router.get('/:birthChartId/user/:userId', authenticate, validateRequest(userIdSchema), insightController.getInsightsByUserId);
+router.get('/:birthChartId/:insightId', authenticate, validateRequest(birthChartIdSchema), insightController.getInsightsByCategory);
 
 export default router; 

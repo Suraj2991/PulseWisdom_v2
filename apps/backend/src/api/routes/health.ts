@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express';
-import mongoose from 'mongoose';
+import { DatabaseService } from '../../infrastructure/database';
 
 export const healthRouter = Router();
 
 healthRouter.get('/', async (_req: Request, res: Response) => {
-  const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  const dbService = DatabaseService.getInstance();
+  const mongoStatus = dbService.getMongoDb() ? 'connected' : 'disconnected';
 
   res.json({
     status: 'ok',

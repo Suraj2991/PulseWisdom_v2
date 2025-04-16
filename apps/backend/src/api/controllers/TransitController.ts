@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { TransitService } from '../services/TransitService';
-import { ValidationError } from '../types/errors';
-import { DateTime } from '../types/ephemeris.types';
-import { BirthChartService } from '../services/BirthChartService';
+import { TransitService } from '../../application/services/TransitService';
+import { ValidationError } from '../../domain/errors';
+import { DateTime } from '../../domain/types/ephemeris.types';
+import { BirthChartService } from '../../application/services/BirthChartService';
+import { Validator } from '../../shared/validation';
 
 export class TransitController {
   constructor(
@@ -113,35 +114,7 @@ export class TransitController {
   };
 
   private validateDateTime(date: DateTime): void {
-    if (!date || typeof date !== 'object') {
-      throw new ValidationError('Invalid date format');
-    }
-
-    const { year, month, day, hour, minute, second, timezone } = date;
-
-    if (!year || !month || !day || hour === undefined || minute === undefined || second === undefined || !timezone) {
-      throw new ValidationError('Invalid datetime format');
-    }
-
-    if (month < 1 || month > 12) {
-      throw new ValidationError('Invalid month');
-    }
-
-    if (day < 1 || day > 31) {
-      throw new ValidationError('Invalid day');
-    }
-
-    if (hour < 0 || hour > 23) {
-      throw new ValidationError('Invalid hour');
-    }
-
-    if (minute < 0 || minute > 59) {
-      throw new ValidationError('Invalid minute');
-    }
-
-    if (second < 0 || second > 59) {
-      throw new ValidationError('Invalid second');
-    }
+    Validator.validateDateTime(date);
   }
 
   private parseDate(dateString: string): DateTime {

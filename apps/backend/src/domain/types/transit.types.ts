@@ -31,4 +31,17 @@ export interface TransitAnalysis {
   windows: TransitWindow[];
   majorThemes: string[];
   recommendations: string[];
+}
+
+export interface TransitAspect {
+  planet: string;
+  sign: string;
+  house: number;
+  orb: number;
+  aspectingNatal?: CelestialBody;
+  exactDate: Date;
+  influence: string;
+  strength?: number;
+  type: string;
+  applying: boolean;
 } 

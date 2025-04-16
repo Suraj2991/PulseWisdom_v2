@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { ValidationError as ExpressValidationError, validationResult } from 'express-validator';
-import { Error as MongooseError } from 'mongoose';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import {
   AppError,
@@ -12,7 +11,8 @@ import {
   ConfigurationError,
   RateLimitError,
   ServiceUnavailableError,
-} from '../../types/errors';
+} from '../../domain/errors';
+import { logger } from '../logger';
 
 type ErrorSeverity = 'error' | 'warn' | 'info';
 
@@ -54,11 +54,11 @@ export const errorHandler = (
 
   // Log based on severity
   if (severity === 'error') {
-    console.error('Error:', logData);
+    logger.error('Error:', logData);
   } else if (severity === 'warn') {
-    console.warn('Warning:', logData);
+    logger.warn('Warning:', logData);
   } else {
-    console.info('Info:', logData);
+    logger.info('Info:', logData);
   }
 
   // Handle express-validator ValidationError
@@ -80,29 +80,6 @@ export const errorHandler = (
       status: 'error',
       code: err instanceof TokenExpiredError ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN',
       message: err instanceof TokenExpiredError ? 'Authentication token has expired' : 'Invalid authentication token',
-    });
-  }
-
-  // Handle mongoose validation error
-  if (err instanceof MongooseError.ValidationError) {
-    const errors = Object.values((err as any).errors).map((e: any) => ({
-      field: e.path,
-      message: e.message,
-    }));
-    return res.status(400).json({
-      status: 'error',
-      code: 'VALIDATION_ERROR',
-      message: 'Validation failed',
-      details: errors,
-    });
-  }
-
-  // Handle mongoose duplicate key error
-  if ((err as any).code === 11000) {
-    return res.status(409).json({
-      status: 'error',
-      code: 'DUPLICATE_KEY',
-      message: 'A record with this value already exists',
     });
   }
 
@@ -182,6 +159,22 @@ export const errorHandler = (
   // Handle AppError with proper status code
   if (err instanceof AppError) {
     const statusCode = err.statusCode || 500;
+    const logData = {
+      error: err.message,
+      stack: err.stack,
+      path: req.path,
+      method: req.method,
+      status: statusCode
+    };
+
+    if (statusCode >= 500) {
+      logger.error('Server Error:', logData);
+    } else if (statusCode >= 400) {
+      logger.warn('Client Error:', logData);
+    } else {
+      logger.info('Application Error:', logData);
+    }
+
     return res.status(statusCode).json({
       status: 'error',
       code: err.code || 'APP_ERROR',
@@ -191,6 +184,13 @@ export const errorHandler = (
   }
 
   // Handle unknown errors
+  logger.error('Unhandled Error:', {
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method
+  });
+
   return res.status(500).json({
     status: 'error',
     code: 'INTERNAL_ERROR',

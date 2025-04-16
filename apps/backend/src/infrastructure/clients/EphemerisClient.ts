@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
-import { IEphemerisClient, EphemerisRequest, CelestialBody } from '../../domain/ports/IEphemerisClient';
+import { IEphemerisClient, EphemerisRequest, AspectResponse, HouseResponse } from '../../domain/ports/IEphemerisClient';
+import { CelestialBody } from '../../domain/types/ephemeris.types';
 
 export class EphemerisClient implements IEphemerisClient {
   private client: AxiosInstance;
@@ -14,29 +15,24 @@ export class EphemerisClient implements IEphemerisClient {
     });
   }
 
-  async calculatePositions(request: EphemerisRequest): Promise<CelestialBody> {
+  async calculatePositions(request: EphemerisRequest): Promise<CelestialBody[]> {
     const response = await this.client.post('/positions', {
-      date: request.date.toISOString(),
-      latitude: request.latitude,
-      longitude: request.longitude,
-      altitude: request.altitude || 0,
-      bodies: request.bodies || ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto']
+      date: request.date,
+      position: request.position
     });
 
     return response.data;
   }
 
-  async calculateAspects(positions: CelestialBody): Promise<any> {
+  async calculateAspects(positions: CelestialBody[]): Promise<AspectResponse[]> {
     const response = await this.client.post('/aspects', { positions });
     return response.data;
   }
 
-  async calculateHouses(request: EphemerisRequest): Promise<any> {
+  async calculateHouses(request: EphemerisRequest): Promise<HouseResponse[]> {
     const response = await this.client.post('/houses', {
-      date: request.date.toISOString(),
-      latitude: request.latitude,
-      longitude: request.longitude,
-      altitude: request.altitude || 0
+      date: request.date,
+      position: request.position
     });
     return response.data;
   }

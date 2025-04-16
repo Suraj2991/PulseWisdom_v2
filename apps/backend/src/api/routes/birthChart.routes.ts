@@ -1,19 +1,24 @@
 import { Router } from 'express';
 import { BirthChartController } from '../controllers/BirthChartController';
-import { BirthChartService } from '../services/BirthChartService';
-import { authenticate } from '../shared/middleware/auth';
-import { RedisCache } from '../infrastructure/cache/RedisCache';
-import { EphemerisService } from '../services/EphemerisService';
-import { validateRequest } from '../shared/middleware/validateRequest';
+import { BirthChartService } from '../../application/services/BirthChartService';
+import { authenticate } from '../middleware/auth';
+import { RedisCache } from '../../infrastructure/cache/RedisCache';
+import { EphemerisService } from '../../application/services/EphemerisService';
+import { validateRequest } from '../../shared/middleware/validateRequest';
 import { z } from 'zod';
-import { HouseSystem } from '../types/ephemeris.types';
+import { HouseSystem, HOUSE_SYSTEMS } from '../../shared/constants/astrology';
+import { ICache } from '../../infrastructure/cache/ICache';
+import { Sanitizer } from '../../shared/sanitization';
+import { EphemerisClient } from '../../infrastructure/clients/EphemerisClient';
+import { config } from '../../shared/config';
 
 const router = Router();
 
 // Initialize services
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const redisUrl = config.redisUrl;
 const cache = new RedisCache(redisUrl);
-const ephemerisService = new EphemerisService(cache, process.env.EPHEMERIS_SERVICE_URL || 'http://localhost:3000');
+const ephemerisClient = new EphemerisClient(config.ephemerisApiUrl, config.ephemerisApiKey);
+const ephemerisService = new EphemerisService(ephemerisClient, cache);
 const birthChartService = new BirthChartService(cache, ephemerisService);
 const birthChartController = new BirthChartController(birthChartService);
 
@@ -92,16 +97,28 @@ const calculateBirthChartSchema = z.object({
       latitude: z.number().min(-90).max(90),
       longitude: z.number().min(-180).max(180)
     }),
-    houseSystem: z.nativeEnum(HouseSystem).optional()
+    houseSystem: z.enum(Object.values(HOUSE_SYSTEMS) as [string, ...string[]]).optional()
   })
 });
 
 // Protected routes
 router.use(authenticate);
 
+// Normalize and sanitize birth chart input
+const normalizeBirthChartInput = (req: any, res: any, next: any) => {
+  if (req.body.datetime?.timezone) {
+    req.body.datetime.timezone = req.body.datetime.timezone.trim();
+  }
+  if (req.body.location?.name) {
+    req.body.location.name = Sanitizer.sanitizeString(req.body.location.name);
+  }
+  next();
+};
+
 // Create a new birth chart
 router.post(
   '/users/:userId/birth-charts',
+  normalizeBirthChartInput,
   validateRequest(createBirthChartSchema),
   birthChartController.createBirthChart
 );
@@ -116,6 +133,7 @@ router.get(
 // Update birth chart
 router.put(
   '/birth-charts/:birthChartId',
+  normalizeBirthChartInput,
   validateRequest(updateBirthChartSchema),
   birthChartController.updateBirthChart
 );
@@ -137,6 +155,7 @@ router.get(
 // Calculate birth chart without saving
 router.post(
   '/birth-charts/calculate',
+  normalizeBirthChartInput,
   validateRequest(calculateBirthChartSchema),
   birthChartController.calculateBirthChart
 );

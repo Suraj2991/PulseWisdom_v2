@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { ValidationError, AuthError, NotFoundError, DatabaseError } from '../types/errors';
+import { ValidationError, AuthError, NotFoundError, DatabaseError } from '../../domain/errors';
+import { logger } from '../../shared/logger';
 
 export const errorHandler = (
   error: Error,
@@ -7,7 +8,26 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
-  console.error(error);
+  const { method, url, ip, headers } = req;
+  const userAgent = headers['user-agent'] || 'unknown';
+  const userId = req.user?.id || 'anonymous';
+
+  // Log the error with context
+  logger.error('Request error', {
+    error: {
+      message: error.message,
+      name: error.name,
+      stack: error.stack
+    },
+    request: {
+      method,
+      url,
+      ip,
+      userAgent,
+      userId
+    },
+    timestamp: new Date().toISOString()
+  });
 
   if (error instanceof ValidationError) {
     return res.status(400).json({

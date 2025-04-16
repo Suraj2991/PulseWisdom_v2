@@ -3,8 +3,11 @@ import { Strength, Challenge, Pattern, CelestialBody, NodePlacement } from '../d
 import { Transit } from '../domain/types/transit.types';
 import { BirthChart } from '../domain/types/ephemeris.types';
 import { HouseTheme, HouseLord } from '../domain/types/insight.types';
+import { ICache } from '../infrastructure/cache/ICache';
 
 export class PromptBuilder {
+  constructor(private readonly cache: ICache) {}
+
   static buildLifeThemePrompt(themeData: LifeTheme, useMarkdown: boolean = false): string {
     const header = 'You are an expert astrologer. Provide a detailed insight based on the following life theme data.';
     const content = {

@@ -1,13 +1,17 @@
+import { InsightCategory, InsightSeverity } from './insight.types';
+
 export interface LifeTheme {
-  theme: string;
+  id: string;
+  title: string;
   description: string;
-  influences: string[];
-  planetaryAspects: {
-    planet: string;
-    aspect: string;
-    influence: string;
-  }[];
-  // Add more fields as necessary
+  category: InsightCategory;
+  severity: InsightSeverity;
+  aspects: string[];
+  supportingFactors: string[];
+  challenges: string[];
+  recommendations: string[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Strength {
