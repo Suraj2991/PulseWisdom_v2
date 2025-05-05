@@ -100,23 +100,52 @@ export class AIService {
   async generateNatalChartInsight(birthChart: BirthChartDocument): Promise<{ insight: string; log: InsightLog }> {
     try {
       this.logStartInsightGeneration('natal chart', birthChart._id);
-      const prompt = PromptBuilder.buildNatalChartPrompt(this.convertToBirthChart(birthChart), true);
-      const insight = await this.generateInsightWithRetry(prompt);
       
       // Extract key placements for metadata
       const sun = birthChart.bodies.find(b => b.name === 'Sun');
       const moon = birthChart.bodies.find(b => b.name === 'Moon');
       const ascendant = birthChart.bodies.find(b => b.name === 'Ascendant');
+      
+      // Get additional aspects for moon and ascendant
+      const moonAspects = birthChart.aspects.filter(a => 
+        a.body1 === 'Moon' || a.body2 === 'Moon'
+      );
+      const ascendantAspects = birthChart.aspects.filter(a => 
+        a.body1 === 'Ascendant' || a.body2 === 'Ascendant'
+      );
 
+      const prompt = PromptBuilder.buildNatalChartPrompt(this.convertToBirthChart(birthChart), true);
+      const insight = await this.generateInsightWithRetry(prompt);
+      
       const log = this.createInsightLog(InsightType.BIRTH_CHART, birthChart._id.toString(), insight, {
         date: new Date(),
         focusArea: 'Core Identity',
+        // Sun placement
         planet: sun?.name,
         sign: sun?.sign,
         house: sun?.house,
-        moonSign: moon?.sign,
-        moonHouse: moon?.house,
-        ascendantSign: ascendant?.sign,
+        // Additional planets array for moon and ascendant
+        planets: ['Moon', 'Ascendant'],
+        // Active planets array for aspects
+        activePlanets: [
+          ...moonAspects.map(a => a.body1 === 'Moon' ? a.body2 : a.body1),
+          ...ascendantAspects.map(a => a.body1 === 'Ascendant' ? a.body2 : a.body1)
+        ],
+        // Key transits array to include moon and ascendant aspects
+        keyTransits: [
+          ...moonAspects.map(a => ({
+            planet: a.body1 === 'Moon' ? a.body2 : a.body1,
+            sign: moon?.sign || '',
+            house: moon?.house || 0,
+            orb: a.orb
+          })),
+          ...ascendantAspects.map(a => ({
+            planet: a.body1 === 'Ascendant' ? a.body2 : a.body1,
+            sign: ascendant?.sign || '',
+            house: ascendant?.house || 0,
+            orb: a.orb
+          }))
+        ],
         lifeThemeKey: 'core_identity',
         triggeredBy: 'natal'
       });
@@ -218,94 +247,112 @@ export class AIService {
 
   async analyzeStrengths(birthChart: BirthChartDocument): Promise<Strength[]> {
     try {
-      logger.info('Starting strengths analysis', { 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'strengths'
-      });
+      this.logStartInsightGeneration('strengths', birthChart._id);
+      
       const chart = this.convertToBirthChart(birthChart);
-      const prompt = PromptBuilder.buildStrengthsPrompt([], true); // Empty array as initial state
-      const insight = await this.llmClient.generateInsight(prompt);
-      const strengths = this.extractStrengthsFromChart(chart);
+      const chironPlacement = this.getChironPlacement(birthChart);
+      const northNode = this.getNodePlacement(
+        birthChart.bodies.find(body => body.name === 'North Node'),
+        'North Node'
+      );
+      const southNode = this.getNodePlacement(
+        birthChart.bodies.find(body => body.name === 'South Node'),
+        'South Node'
+      );
+
+      // Get mechanical analysis
+      const mechanicalStrengths = this.extractStrengthsFromChart(chart);
       
-      logger.info('Completed strengths analysis', { 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'strengths',
-        strengthCount: strengths.length 
+      // Get AI insights
+      const prompt = PromptBuilder.buildStrengthsPrompt(mechanicalStrengths, true);
+      const insight = await this.generateInsightWithRetry(prompt);
+      
+      // Combine mechanical and AI analysis
+      const enhancedStrengths = this.enhanceStrengthsWithAI(mechanicalStrengths, insight, {
+        chironPlacement,
+        northNode,
+        southNode
       });
-      
-      return strengths;
+
+      this.logCompletion('strengths', birthChart._id);
+      return enhancedStrengths;
     } catch (error) {
-      logger.error('Failed to analyze strengths', { 
-        error, 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'strengths'
-      });
-      throw new ServiceError(`Failed to analyze strengths: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.handleInsightError(error, birthChart._id.toString(), birthChart._id.toString());
+      throw error;
     }
   }
 
   async analyzeChallenges(birthChart: BirthChartDocument): Promise<Challenge[]> {
     try {
-      logger.info('Starting challenges analysis', { 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'challenges'
-      });
+      this.logStartInsightGeneration('challenges', birthChart._id);
+      
       const chart = this.convertToBirthChart(birthChart);
-      const prompt = PromptBuilder.buildChallengesPrompt([], true); // Empty array as initial state
-      const insight = await this.llmClient.generateInsight(prompt);
-      const challenges = this.extractChallengesFromChart(chart);
+      const chironPlacement = this.getChironPlacement(birthChart);
+      const northNode = this.getNodePlacement(
+        birthChart.bodies.find(body => body.name === 'North Node'),
+        'North Node'
+      );
+      const southNode = this.getNodePlacement(
+        birthChart.bodies.find(body => body.name === 'South Node'),
+        'South Node'
+      );
+
+      // Get mechanical analysis
+      const mechanicalChallenges = this.extractChallengesFromChart(chart);
       
-      logger.info('Completed challenges analysis', { 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'challenges',
-        challengeCount: challenges.length 
+      // Get AI insights
+      const prompt = PromptBuilder.buildChallengesPrompt(mechanicalChallenges, true);
+      const insight = await this.generateInsightWithRetry(prompt);
+      
+      // Combine mechanical and AI analysis
+      const enhancedChallenges = this.enhanceChallengesWithAI(mechanicalChallenges, insight, {
+        chironPlacement,
+        northNode,
+        southNode
       });
-      
-      return challenges;
+
+      this.logCompletion('challenges', birthChart._id);
+      return enhancedChallenges;
     } catch (error) {
-      logger.error('Failed to analyze challenges', { 
-        error, 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'challenges'
-      });
-      throw new ServiceError(`Failed to analyze challenges: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.handleInsightError(error, birthChart._id.toString(), birthChart._id.toString());
+      throw error;
     }
   }
 
   async analyzePatterns(birthChart: BirthChartDocument): Promise<Pattern[]> {
     try {
-      logger.info('Starting patterns analysis', { 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'patterns'
-      });
+      this.logStartInsightGeneration('patterns', birthChart._id);
+      
       const chart = this.convertToBirthChart(birthChart);
-      const prompt = PromptBuilder.buildPatternsPrompt([], true); // Empty array as initial state
-      const insight = await this.llmClient.generateInsight(prompt);
-      const patterns = this.extractPatternsFromChart(chart);
+      const chironPlacement = this.getChironPlacement(birthChart);
+      const northNode = this.getNodePlacement(
+        birthChart.bodies.find(body => body.name === 'North Node'),
+        'North Node'
+      );
+      const southNode = this.getNodePlacement(
+        birthChart.bodies.find(body => body.name === 'South Node'),
+        'South Node'
+      );
+
+      // Get mechanical analysis
+      const mechanicalPatterns = this.extractPatternsFromChart(chart);
       
-      logger.info('Completed patterns analysis', { 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'patterns',
-        patternCount: patterns.length 
+      // Get AI insights
+      const prompt = PromptBuilder.buildPatternsPrompt(mechanicalPatterns, true);
+      const insight = await this.generateInsightWithRetry(prompt);
+      
+      // Combine mechanical and AI analysis
+      const enhancedPatterns = this.enhancePatternsWithAI(mechanicalPatterns, insight, {
+        chironPlacement,
+        northNode,
+        southNode
       });
-      
-      return patterns;
+
+      this.logCompletion('patterns', birthChart._id);
+      return enhancedPatterns;
     } catch (error) {
-      logger.error('Failed to analyze patterns', { 
-        error, 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'patterns'
-      });
-      throw new ServiceError(`Failed to analyze patterns: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.handleInsightError(error, birthChart._id.toString(), birthChart._id.toString());
+      throw error;
     }
   }
 
@@ -379,6 +426,124 @@ export class AIService {
     });
 
     return patterns;
+  }
+
+  private enhanceStrengthsWithAI(
+    mechanicalStrengths: Strength[],
+    aiInsight: string,
+    placements: {
+      chironPlacement: NodePlacement;
+      northNode: NodePlacement;
+      southNode: NodePlacement;
+    }
+  ): Strength[] {
+    // Add Chiron-related strengths
+    if (placements.chironPlacement.sign) {
+      mechanicalStrengths.push({
+        area: 'Healing & Growth',
+        description: `Strong potential for healing and growth through ${placements.chironPlacement.sign} energy`,
+        supportingAspects: ['Chiron Placement']
+      });
+    }
+
+    // Add Node-related strengths
+    if (placements.northNode.sign) {
+      mechanicalStrengths.push({
+        area: 'Life Purpose',
+        description: `Clear direction for growth and evolution through ${placements.northNode.sign} energy`,
+        supportingAspects: ['North Node Placement']
+      });
+    }
+
+    // Parse AI insight to extract additional strengths
+    const aiStrengths = this.parseAIInsightForStrengths(aiInsight);
+    return [...mechanicalStrengths, ...aiStrengths];
+  }
+
+  private enhanceChallengesWithAI(
+    mechanicalChallenges: Challenge[],
+    aiInsight: string,
+    placements: {
+      chironPlacement: NodePlacement;
+      northNode: NodePlacement;
+      southNode: NodePlacement;
+    }
+  ): Challenge[] {
+    // Add Chiron-related challenges
+    if (placements.chironPlacement.sign) {
+      mechanicalChallenges.push({
+        area: 'Healing Journey',
+        description: `Opportunity for deep healing in ${placements.chironPlacement.sign} areas`,
+        growthOpportunities: ['Emotional Healing', 'Personal Growth'],
+        supportingAspects: ['Chiron Placement']
+      });
+    }
+
+    // Add Node-related challenges
+    if (placements.southNode.sign) {
+      mechanicalChallenges.push({
+        area: 'Karmic Patterns',
+        description: `Release of old patterns associated with ${placements.southNode.sign} energy`,
+        growthOpportunities: ['Letting Go', 'Transformation'],
+        supportingAspects: ['South Node Placement']
+      });
+    }
+
+    // Parse AI insight to extract additional challenges
+    const aiChallenges = this.parseAIInsightForChallenges(aiInsight);
+    return [...mechanicalChallenges, ...aiChallenges];
+  }
+
+  private enhancePatternsWithAI(
+    mechanicalPatterns: Pattern[],
+    aiInsight: string,
+    placements: {
+      chironPlacement: NodePlacement;
+      northNode: NodePlacement;
+      southNode: NodePlacement;
+    }
+  ): Pattern[] {
+    // Add Chiron-related patterns
+    if (placements.chironPlacement.sign) {
+      mechanicalPatterns.push({
+        type: 'Healing Pattern',
+        description: `Recurring themes of healing and growth in ${placements.chironPlacement.sign}`,
+        planets: ['Chiron'],
+        houses: [placements.chironPlacement.house]
+      });
+    }
+
+    // Add Node-related patterns
+    if (placements.northNode.sign && placements.southNode.sign) {
+      mechanicalPatterns.push({
+        type: 'Karmic Pattern',
+        description: `Balance between past (${placements.southNode.sign}) and future (${placements.northNode.sign})`,
+        planets: ['North Node', 'South Node'],
+        houses: [placements.northNode.house, placements.southNode.house]
+      });
+    }
+
+    // Parse AI insight to extract additional patterns
+    const aiPatterns = this.parseAIInsightForPatterns(aiInsight);
+    return [...mechanicalPatterns, ...aiPatterns];
+  }
+
+  private parseAIInsightForStrengths(insight: string): Strength[] {
+    // TODO: Implement AI insight parsing for strengths
+    // This would use NLP to extract strength-related information from the AI insight
+    return [];
+  }
+
+  private parseAIInsightForChallenges(insight: string): Challenge[] {
+    // TODO: Implement AI insight parsing for challenges
+    // This would use NLP to extract challenge-related information from the AI insight
+    return [];
+  }
+
+  private parseAIInsightForPatterns(insight: string): Pattern[] {
+    // TODO: Implement AI insight parsing for patterns
+    // This would use NLP to extract pattern-related information from the AI insight
+    return [];
   }
 
   async analyzeHouseThemes(birthChart: BirthChartDocument): Promise<HouseTheme[]> {
@@ -611,11 +776,7 @@ export class AIService {
 
   async generateNodeInsight(birthChart: BirthChartDocument): Promise<{ insight: string; log: InsightLog }> {
     try {
-      logger.info('Starting node insight generation', { 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'node_path'
-      });
+      this.logStartInsightGeneration('node path', birthChart._id);
       
       // Find North and South Nodes
       const northNode = birthChart.bodies.find(body => body.name === 'North Node');
@@ -633,7 +794,7 @@ export class AIService {
           degree: southNode.longitude % 30
         } : { sign: '', house: 0, degree: 0 }
       }, true);
-      const insight = await this.llmClient.generateInsight(prompt);
+      const insight = await this.generateInsightWithRetry(prompt);
       
       const log = this.createInsightLog(InsightType.NODE_PATH, birthChart._id.toString(), insight, {
         date: new Date(),
@@ -653,31 +814,20 @@ export class AIService {
         } : undefined
       });
 
-      logger.info('Completed node insight generation', { 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'node_path'
-      });
+      this.logCompletion('node path', birthChart._id);
       return { insight, log };
     } catch (error) {
-      logger.error('Failed to generate node insight', { 
-        error, 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: 'node_path'
-      });
-      throw new ServiceError(`Failed to generate node insight: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.handleInsightError(error, birthChart._id.toString(), birthChart._id.toString());
+      throw error;
     }
   }
 
   async generateHouseThemesInsight(houseThemes: HouseTheme[]): Promise<{ insight: string; log: InsightLog }> {
     try {
-      logger.info('Starting house themes insight generation', { 
-        count: houseThemes.length,
-        insightType: 'house_themes'
-      });
+      this.logStartInsightGeneration('house themes', houseThemes[0]?.house.toString() || 'unknown');
+      
       const prompt = PromptBuilder.buildHouseThemesPrompt(houseThemes, true);
-      const insight = await this.llmClient.generateInsight(prompt);
+      const insight = await this.generateInsightWithRetry(prompt);
       
       const primaryHouse = houseThemes[0]; // Assuming first house is most significant
       const log = this.createInsightLog(InsightType.BIRTH_CHART, primaryHouse.house.toString(), insight, {
@@ -689,28 +839,20 @@ export class AIService {
         planet: primaryHouse.planets[0]
       });
 
-      logger.info('Completed house themes insight generation', { 
-        count: houseThemes.length,
-        insightType: 'house_themes'
-      });
+      this.logCompletion('house themes', primaryHouse.house);
       return { insight, log };
     } catch (error) {
-      logger.error('Failed to generate house themes insight', { 
-        error,
-        insightType: 'house_themes'
-      });
-      throw new ServiceError(`Failed to generate house themes insight: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.handleInsightError(error, houseThemes[0]?.house.toString() || 'unknown', houseThemes[0]?.house.toString() || 'unknown');
+      throw error;
     }
   }
 
   async generateHouseLordsInsight(houseLords: HouseLord[]): Promise<{ insight: string; log: InsightLog }> {
     try {
-      logger.info('Starting house lords insight generation', { 
-        count: houseLords.length,
-        insightType: 'house_lords'
-      });
+      this.logStartInsightGeneration('house lords', houseLords[0]?.house.toString() || 'unknown');
+      
       const prompt = PromptBuilder.buildHouseLordsPrompt(houseLords, true);
-      const insight = await this.llmClient.generateInsight(prompt);
+      const insight = await this.generateInsightWithRetry(prompt);
       
       const primaryLord = houseLords[0]; // Assuming first lord is most significant
       const log = this.createInsightLog(InsightType.BIRTH_CHART, primaryLord.house.toString(), insight, {
@@ -723,17 +865,11 @@ export class AIService {
         dignity: primaryLord.dignity
       });
 
-      logger.info('Completed house lords insight generation', { 
-        count: houseLords.length,
-        insightType: 'house_lords'
-      });
+      this.logCompletion('house lords', primaryLord.house);
       return { insight, log };
     } catch (error) {
-      logger.error('Failed to generate house lords insight', { 
-        error,
-        insightType: 'house_lords'
-      });
-      throw new ServiceError(`Failed to generate house lords insight: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.handleInsightError(error, houseLords[0]?.house.toString() || 'unknown', houseLords[0]?.house.toString() || 'unknown');
+      throw error;
     }
   }
 
@@ -743,16 +879,10 @@ export class AIService {
     currentDate: Date
   ): Promise<{ insight: string; insightLog: InsightLog }> {
     try {
-      logger.info('Starting daily insight generation', { 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: InsightType.DAILY,
-        date: currentDate.toISOString(),
-        transitCount: transits.length
-      });
+      this.logStartInsightGeneration('daily insight', birthChart._id);
       
       const prompt = PromptBuilder.buildDailyInsightPrompt(this.convertToBirthChart(birthChart), transits, currentDate, true);
-      const insight = await this.llmClient.generateInsight(prompt);
+      const insight = await this.generateInsightWithRetry(prompt);
       
       const primaryTransit = getPrimaryTransit(transits);
       const insightLog = createInsightLog(
@@ -769,23 +899,11 @@ export class AIService {
         birthChart.userId.toString()
       );
 
-      logger.info('Completed daily insight generation', { 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: InsightType.DAILY,
-        date: currentDate.toISOString()
-      });
-      
+      this.logCompletion('daily insight', birthChart._id);
       return { insight, insightLog };
     } catch (error) {
-      logger.error('Failed to generate daily insight', { 
-        error, 
-        birthChartId: birthChart._id.toString(),
-        userId: birthChart.userId.toString(),
-        insightType: InsightType.DAILY,
-        currentDate: currentDate.toISOString()
-      });
-      throw new ServiceError(`Failed to generate daily insight: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.handleInsightError(error, birthChart._id.toString(), birthChart._id.toString());
+      throw error;
     }
   }
 
