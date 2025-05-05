@@ -120,16 +120,16 @@ export abstract class BaseEphemerisService extends BaseService {
    * @param name - The name of the celestial body
    * @returns The domain celestial body
    */
-  protected convertToDomainCelestialBody(position: CelestialPosition, name: string): CelestialBody {
+  protected toCelestialBody(position: CelestialPosition, name: string, house = 1): CelestialBody {
     return {
-      id: 0, // This should be assigned based on some logic
+      id: 0,
       name,
       longitude: position.longitude,
       latitude: position.latitude,
       speed: position.speed,
-      house: 1, // Default to first house if not specified
+      house,
       sign: this.getSignFromLongitude(position.longitude),
-      signLongitude: this.getSignLongitude(position.longitude)
+      retrograde: position.speed < 0
     };
   }
 
@@ -215,27 +215,27 @@ export abstract class BaseEphemerisService extends BaseService {
             name: b.name,
             sign: b.sign,
             house: b.house,
-            degree: b.signLongitude
+            degree: b.longitude % 30
           })),
           housePlacements: houses.map(h => ({
             house: h.number,
             sign: EphemerisAdapter.getSignFromLongitude(h.cusp)
           })),
-          chiron: {
-            sign: chiron?.sign || '',
-            house: chiron?.house || 1,
-            degree: chiron?.signLongitude || 0
-          },
-          northNode: {
-            sign: northNode?.sign || '',
-            house: northNode?.house || 1,
-            degree: northNode?.signLongitude || 0
-          },
-          southNode: {
-            sign: southNode?.sign || '',
-            house: southNode?.house || 1,
-            degree: southNode?.signLongitude || 0
-          }
+          chiron: chiron ? {
+            sign: chiron.sign,
+            house: chiron.house,
+            degree: (chiron.longitude ?? 0) % 30
+          } : { sign: '', house: 0, degree: 0 },
+          northNode: northNode ? {
+            sign: northNode.sign,
+            house: northNode.house,
+            degree: (northNode.longitude ?? 0) % 30
+          } : { sign: '', house: 0, degree: 0 },
+          southNode: southNode ? {
+            sign: southNode.sign,
+            house: southNode.house,
+            degree: (southNode.longitude ?? 0) % 30
+          } : { sign: '', house: 0, degree: 0 }
         };
       },
       { operation: 'calculateBirthChart', datetime, location }

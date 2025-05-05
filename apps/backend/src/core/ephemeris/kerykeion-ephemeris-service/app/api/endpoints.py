@@ -45,24 +45,25 @@ async def calculate_houses(
 
 @router.post("/aspects", response_model=List[Aspect])
 async def calculate_aspects(
-    bodies: List[CelestialBody]
+    datetime: DateTime,
+    location: GeoPosition
 ) -> List[Aspect]:
     """Calculate aspects between celestial bodies."""
     try:
-        # TODO: Implement aspect calculation
-        raise NotImplementedError("Aspect calculation not yet implemented")
+        birth_chart = await kerykeion_service.calculate_birth_chart(datetime, location)
+        return birth_chart.aspects
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/transits", response_model=List[Aspect])
 async def calculate_transits(
     natal_chart: BirthChart,
-    date_range: DateRange
+    date_range: DateRange,
+    orb: float = 1.0
 ) -> List[Aspect]:
     """Calculate transits for a given date range."""
     try:
-        # TODO: Implement transit calculation
-        raise NotImplementedError("Transit calculation not yet implemented")
+        return await kerykeion_service.calculate_transits(natal_chart, date_range, orb)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -71,30 +72,30 @@ async def calculate_significant_events(
     date_range: DateRange
 ) -> List[AstrologicalEvent]:
     """Calculate significant astrological events for a date range."""
-    try:
-        # TODO: Implement significant events calculation
-        raise NotImplementedError("Significant events calculation not yet implemented")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # Feature not yet implemented in KerykeionService
+    raise HTTPException(
+        status_code=501,
+        detail="Significant events calculation is not yet implemented"
+    )
 
 @router.post("/fixed-stars", response_model=List[FixedStar])
 async def calculate_fixed_stars(
     datetime: DateTime
 ) -> List[FixedStar]:
     """Calculate fixed star positions."""
-    try:
-        # TODO: Implement fixed star calculation
-        raise NotImplementedError("Fixed star calculation not yet implemented")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # Feature not yet implemented in KerykeionService
+    raise HTTPException(
+        status_code=501,
+        detail="Fixed star calculation is not yet implemented"
+    )
 
 @router.post("/lunar-phases", response_model=List[LunarPhase])
 async def calculate_lunar_phases(
     date_range: DateRange
 ) -> List[LunarPhase]:
     """Calculate lunar phases for a date range."""
-    try:
-        # TODO: Implement lunar phase calculation
-        raise NotImplementedError("Lunar phase calculation not yet implemented")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+    # Feature not yet implemented in KerykeionService
+    raise HTTPException(
+        status_code=501,
+        detail="Lunar phase calculation is not yet implemented"
+    ) 

@@ -21,19 +21,25 @@ import { TransitInsightGenerator } from './TransitInsightGenerator';
 import { DailyInsightGenerator } from './DailyInsightGenerator';
 import { WeeklyDigestInsightGenerator } from './WeeklyDigestInsightGenerator';
 import { ThemeForecastInsightGenerator } from './ThemeForecastInsightGenerator';
-import { AIService, PromptBuilder } from '../../ai';
+import { AIService, PromptBuilder, ChartAnalysisService } from '../../ai';
+import { BirthChartService } from '../../birthchart/services/BirthChartService';
+import { ICache } from '../../../infrastructure/cache/ICache';
+import { LLMClient } from '../../ai';
 
 export class InsightGeneratorFactory {
   private static generators: Map<InsightType, IInsightGenerator<Insight>> = new Map();
 
-  static initialize(aiService: AIService, promptBuilder: PromptBuilder): void {
+  static initialize(aiService: AIService, promptBuilder: PromptBuilder, birthChartService: BirthChartService, cache: ICache, llmClient: LLMClient): void {
+    // Create chart analysis service
+    const chartAnalysisService = new ChartAnalysisService(llmClient, cache);
+
     // Register all generators
-    this.registerGenerator(InsightType.CORE_IDENTITY, new CoreIdentityInsightGenerator() as IInsightGenerator<CoreIdentityInsight>);
-    this.registerGenerator(InsightType.ASPECT, new StrengthAndChallengeInsightGenerator() as IInsightGenerator<AspectInsight>);
-    this.registerGenerator(InsightType.PATTERN, new PatternInsightGenerator() as IInsightGenerator<PatternInsight>);
-    this.registerGenerator(InsightType.NODE_PATH, new NodePathInsightGenerator(aiService, promptBuilder) as IInsightGenerator<NodePathInsight>);
+    this.registerGenerator(InsightType.CORE_IDENTITY, new CoreIdentityInsightGenerator(aiService) as IInsightGenerator<CoreIdentityInsight>);
+    this.registerGenerator(InsightType.ASPECT, new StrengthAndChallengeInsightGenerator(chartAnalysisService) as IInsightGenerator<AspectInsight>);
+    this.registerGenerator(InsightType.PATTERN, new PatternInsightGenerator(aiService, promptBuilder) as IInsightGenerator<PatternInsight>);
+    this.registerGenerator(InsightType.NODE_PATH, new NodePathInsightGenerator(aiService, promptBuilder, birthChartService) as IInsightGenerator<NodePathInsight>);
     this.registerGenerator(InsightType.LIFE_THEME, new LifeThemeInsightGenerator(aiService, promptBuilder) as IInsightGenerator<LifeThemeInsight>);
-    this.registerGenerator(InsightType.TRANSIT, new TransitInsightGenerator() as IInsightGenerator<TransitInsight>);
+    this.registerGenerator(InsightType.TRANSIT, new TransitInsightGenerator(aiService, promptBuilder) as IInsightGenerator<TransitInsight>);
     this.registerGenerator(InsightType.DAILY, new DailyInsightGenerator(aiService, promptBuilder) as IInsightGenerator<DailyInsight>);
     this.registerGenerator(InsightType.WEEKLY_DIGEST, new WeeklyDigestInsightGenerator(aiService, promptBuilder) as IInsightGenerator<WeeklyDigestInsight>);
     this.registerGenerator(InsightType.THEME_FORECAST, new ThemeForecastInsightGenerator(aiService, promptBuilder) as IInsightGenerator<ThemeForecastInsight>);
@@ -42,7 +48,7 @@ export class InsightGeneratorFactory {
   static getGenerator<T extends Insight>(type: InsightType): IInsightGenerator<T> {
     const generator = this.generators.get(type);
     if (!generator) {
-      throw new Error(`No generator registered for type: ${type}`);
+      throw new Error(`No generator registered for insight type: ${type}`);
     }
     return generator as IInsightGenerator<T>;
   }
@@ -52,6 +58,6 @@ export class InsightGeneratorFactory {
   }
 
   static registerGenerator<T extends Insight>(type: InsightType, generator: IInsightGenerator<T>): void {
-    this.generators.set(type, generator as IInsightGenerator<Insight>);
+    this.generators.set(type, generator);
   }
 } 

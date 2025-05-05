@@ -61,6 +61,6 @@ export class BirthChartModel {
 }
 
 // Initialize the model when the database is ready
-databaseService.initialize().then(() => {
-  BirthChartModel.initialize();
+void databaseService.initialize().then(() => {
+  void BirthChartModel.initialize();
 }); 

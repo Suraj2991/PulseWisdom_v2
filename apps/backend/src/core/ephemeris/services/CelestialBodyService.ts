@@ -43,9 +43,9 @@ export class CelestialBodyService {
       longitude: position.longitude,
       latitude: position.latitude,
       speed: position.speed,
-      house: 1, // Default to first house if not specified
+      house: 1, // Default to house 1 since it's optional in CelestialPosition
       sign: this.getSignFromLongitude(position.longitude),
-      signLongitude: this.getSignLongitude(position.longitude)
+      retrograde: position.speed < 0
     };
   }
 

@@ -13,7 +13,7 @@ import { Sanitizer } from '../../../shared/sanitization';
 import { DatabaseService } from '../../../infrastructure/database/database';
 import { ITokenVerifier } from '../ports/ITokenVerifier';
 import { logger } from '../../../shared/logger';
-import { TokenPayload } from '../types/auth.types';
+import { TokenPayload, AuthRequest } from '../types/auth.types';
 
 const router = Router();
 
@@ -69,16 +69,25 @@ const emailVerificationSchema = z.object({
   token: z.string().min(1, 'Token is required')
 });
 
+// Type-safe request body types
+type RegisterBody = z.infer<typeof registerSchema>;
+type LoginBody = z.infer<typeof loginSchema>;
+type RefreshTokenBody = z.infer<typeof refreshTokenSchema>;
+type PasswordResetBody = z.infer<typeof passwordResetSchema>;
+type ResetPasswordBody = z.infer<typeof resetPasswordSchema>;
+
 // Normalize and sanitize auth input
 const normalizeAuthInput = (req: Request, res: Response, next: NextFunction): void => {
-  if (req.body.email) {
-    req.body.email = Sanitizer.sanitizeEmail(req.body.email);
+  const body = req.body as Partial<RegisterBody>;
+  
+  if (body.email) {
+    body.email = Sanitizer.sanitizeEmail(body.email);
   }
-  if (req.body.firstName) {
-    req.body.firstName = Sanitizer.sanitizeString(req.body.firstName);
+  if (body.firstName) {
+    body.firstName = Sanitizer.sanitizeString(body.firstName);
   }
-  if (req.body.lastName) {
-    req.body.lastName = Sanitizer.sanitizeString(req.body.lastName);
+  if (body.lastName) {
+    body.lastName = Sanitizer.sanitizeString(body.lastName);
   }
   next();
 };
@@ -88,21 +97,62 @@ router.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', service: 'auth' });
 });
 
-// Public routes
-router.post('/register', authLimiter, normalizeAuthInput, validateRequest(registerSchema), authController.register);
-router.post('/login', authLimiter, normalizeAuthInput, validateRequest(loginSchema), authController.login);
-router.post('/password-reset', authLimiter, normalizeAuthInput, validateRequest(passwordResetSchema), authController.generatePasswordResetToken);
-router.post('/password-reset/:token', authLimiter, validateRequest(resetPasswordSchema), authController.resetPassword);
-router.post('/verify-email/:token', authLimiter, validateRequest(emailVerificationSchema), authController.verifyEmail);
+// Create a type-safe middleware handler
+function createMiddleware<P = unknown, ResBody = unknown, ReqBody = unknown>(
+  middleware: (req: Request<P, ResBody, ReqBody>, res: Response) => Promise<void>
+): RequestHandler {
+  return function expressHandler(req: Request, res: Response, next: NextFunction): void {
+    void middleware(req as Request<P, ResBody, ReqBody>, res).catch(next);
+  };
+}
+
+// Public routes with type-safe request bodies
+router.post(
+  '/register',
+  authLimiter,
+  normalizeAuthInput,
+  validateRequest(registerSchema),
+  createMiddleware<unknown, unknown, RegisterBody>((req, res) => authController.register(req, res))
+);
+
+router.post(
+  '/login',
+  authLimiter,
+  normalizeAuthInput,
+  validateRequest(loginSchema),
+  createMiddleware<unknown, unknown, LoginBody>((req, res) => authController.login(req, res))
+);
+
+router.post(
+  '/password-reset',
+  authLimiter,
+  normalizeAuthInput,
+  validateRequest(passwordResetSchema),
+  createMiddleware<unknown, unknown, PasswordResetBody>((req, res) => authController.generatePasswordResetToken(req, res))
+);
+
+router.post(
+  '/password-reset/:token',
+  authLimiter,
+  validateRequest(resetPasswordSchema),
+  createMiddleware<{ token: string }, unknown, ResetPasswordBody>((req, res) => authController.resetPassword(req, res))
+);
+
+router.post(
+  '/verify-email/:token',
+  authLimiter,
+  validateRequest(emailVerificationSchema),
+  createMiddleware<{ token: string }>((req, res) => authController.verifyEmail(req, res))
+);
 
 // Protected routes
 const tokenVerifier: ITokenVerifier = {
   verifyToken: async (token: string) => {
     try {
       const decoded = await cache.get(`token:${token}`);
-      if (!decoded) return null;
+      if (!decoded || typeof decoded !== 'string') return null;
       
-      const parsed = JSON.parse(decoded as string) as TokenPayload;
+      const parsed = JSON.parse(decoded) as TokenPayload;
       
       // Check if token is expired
       if (parsed.exp && parsed.exp < Date.now() / 1000) {
@@ -122,9 +172,32 @@ const tokenVerifier: ITokenVerifier = {
 };
 
 const authMiddleware = createAuthMiddleware(tokenVerifier);
-router.post('/logout', authMiddleware as RequestHandler, authController.logout as RequestHandler);
-router.post('/refresh-token', authLimiter, validateRequest(refreshTokenSchema), authController.refreshToken);
-router.post('/change-password', authMiddleware as RequestHandler, validateRequest(changePasswordSchema), authController.changePassword as RequestHandler);
-router.get('/sessions', authMiddleware as RequestHandler, authController.getActiveSessions as RequestHandler);
+
+// Protected routes with type-safe request handling
+router.post(
+  '/logout',
+  authMiddleware as RequestHandler,
+  createMiddleware((req, res) => authController.logout(req as AuthRequest, res))
+);
+
+router.post(
+  '/refresh-token',
+  authLimiter,
+  validateRequest(refreshTokenSchema),
+  createMiddleware<unknown, unknown, RefreshTokenBody>((req, res) => authController.refreshToken(req, res))
+);
+
+router.post(
+  '/change-password',
+  authMiddleware as RequestHandler,
+  validateRequest(changePasswordSchema),
+  createMiddleware((req, res) => authController.changePassword(req as AuthRequest, res))
+);
+
+router.get(
+  '/sessions',
+  authMiddleware as RequestHandler,
+  createMiddleware((req, res) => authController.getActiveSessions(req as AuthRequest, res))
+);
 
 export default router;

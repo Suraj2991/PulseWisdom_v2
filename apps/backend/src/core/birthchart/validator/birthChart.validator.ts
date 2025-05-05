@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { HOUSE_SYSTEMS } from '../../../shared/constants/astrology';
-import { DateTime, GeoPosition } from '../../ephemeris/types/ephemeris.types';
 
 // Base schemas
 export const datetimeSchema = z.object({

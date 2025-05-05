@@ -63,8 +63,8 @@ export class LifeThemeModel {
 }
 
 // Initialize the model when the database is ready
-databaseService.initialize().then(() => {
-  LifeThemeModel.initialize().catch(error => {
+void databaseService.initialize().then(() => {
+  void LifeThemeModel.initialize().catch(error => {
     logger.error('Failed to initialize LifeThemeModel', { error });
   });
 }); 

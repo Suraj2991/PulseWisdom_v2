@@ -8,41 +8,8 @@ import { ICache } from '../../../infrastructure/cache/ICache';
 import { PromptBuilder, LLMClient } from '../../ai';
 import { BirthChartDocument, adaptBirthChartData } from '../../birthchart';
 import { Transit } from '../../transit';
-import { EphemerisAdapter
-  , BirthChart
-  , NodePlacement
-  , CelestialBody } from '../../ephemeris';
-
-interface House {
-  number: number;
-  cusp: number;
-  nextCusp: number;
-  size: number;
-  rulerId: number;
-}
-
-interface Houses {
-  cusps: number[];
-  system: string;
-}
-
-interface PatternResult {
-  aspects: Array<{
-    body1Id: number;
-    body2Id: number;
-    type: string;
-    angle: number;
-    orb: number;
-    isApplying: boolean;
-  }>;
-  houses: Array<{
-    number: number;
-    cusp: number;
-    nextCusp: number;
-    size: number;
-    rulerId: number;
-  }>;
-}
+import { EphemerisAdapter, BirthChart } from '../../ephemeris';
+import { WindowType } from '../../transit';
 
 interface Planet {
   name: string;
@@ -52,39 +19,11 @@ interface Planet {
   house: number;
 }
 
-const PLANETARY_DIGNITY = {
-  rulerships: {
-    0: [4, 5],    // Sun rules Leo and Aries
-    1: [2, 3],    // Moon rules Cancer and Taurus
-    2: [3, 6],    // Mercury rules Gemini and Virgo
-    3: [2, 7],    // Venus rules Taurus and Libra
-    4: [1, 8],    // Mars rules Aries and Scorpio
-    5: [9, 12],   // Jupiter rules Sagittarius and Pisces
-    6: [10, 11],  // Saturn rules Capricorn and Aquarius
-    7: [11],      // Uranus rules Aquarius
-    8: [12],      // Neptune rules Pisces
-    9: [1]        // Pluto rules Aries
-  } as Record<number, number[]>,
-  exaltations: {
-    0: [5],       // Sun exalted in Aries
-    1: [2],       // Moon exalted in Taurus
-    2: [6],       // Mercury exalted in Virgo
-    3: [12],      // Venus exalted in Pisces
-    4: [10],      // Mars exalted in Capricorn
-    5: [4],       // Jupiter exalted in Leo
-    6: [7],       // Saturn exalted in Libra
-    7: [4],       // Uranus exalted in Leo
-    8: [7],       // Neptune exalted in Libra
-    9: [4]        // Pluto exalted in Leo
-  } as Record<number, number[]>
-};
-
 export class InsightAnalyzer {
   constructor(
     private readonly cache: ICache,
     private readonly lifeThemeService: LifeThemeService,
     private readonly transitService: TransitService,
-    private readonly promptBuilder: typeof PromptBuilder,
     private readonly llmClient: LLMClient
   ) {}
 
@@ -92,22 +31,22 @@ export class InsightAnalyzer {
     return adaptBirthChartData(birthChart);
   }
 
-  private getChironPlacement(birthChart: BirthChartDocument): NodePlacement {
-    const chiron = birthChart.bodies.find(body => body.name === 'Chiron');
-    return {
-      sign: chiron ? chiron.sign : '',
-      house: chiron ? chiron.house : 0,
-      degree: chiron ? chiron.longitude % 30 : 0
-    };
-  }
+  // private getChironPlacement(birthChart: BirthChartDocument): NodePlacement {
+  //   const chiron = birthChart.bodies.find(body => body.name === 'Chiron');
+  //   return {
+  //     sign: chiron ? chiron.sign : '',
+  //     house: chiron ? chiron.house : 0,
+  //     degree: chiron ? chiron.longitude % 30 : 0
+  //   };
+  // }
 
-  private getNodePlacement(node: CelestialBody | undefined, nodeName: string): NodePlacement {
-    return {
-      sign: node ? node.sign : '',
-      house: node ? node.house : 0,
-      degree: node ? node.longitude % 30 : 0
-    };
-  }
+  // private getNodePlacement(node: CelestialBody | undefined, _nodeName: string): NodePlacement {
+  //   return {
+  //     sign: node ? node.sign : '',
+  //     house: node ? node.house : 0,
+  //     degree: node ? node.longitude % 30 : 0
+  //   };
+  // }
 
   async analyzeInsights(birthChartId: string, date: Date): Promise<InsightAnalysis> {
     try {
@@ -235,7 +174,7 @@ export class InsightAnalyzer {
         transitCount: transits.length
       });
       
-      const prompt = this.promptBuilder.buildSmartTimingPrompt(this.convertToBirthChart(birthChart), transits, currentDate, true);
+      const prompt = PromptBuilder.buildSmartTimingPrompt(this.convertToBirthChart(birthChart), transits, currentDate, true);
       const insight = await this.llmClient.generateInsight(prompt);
       
       // Parse and validate the JSON response
@@ -281,6 +220,16 @@ export class InsightAnalyzer {
       logger.error('Failed to analyze smart timing windows', { error, birthChartId: birthChart._id, currentDate });
       throw new ServiceError(`Failed to analyze smart timing windows: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  private isValidTimingWindow(window: TimingWindow): boolean {
+    return (
+      Object.values(WindowType).includes(window.type) &&
+      window.startDate instanceof Date &&
+      window.endDate instanceof Date &&
+      window.title.length > 0 &&
+      window.description.length > 0
+    );
   }
 
   // ... rest of the analysis methods ...

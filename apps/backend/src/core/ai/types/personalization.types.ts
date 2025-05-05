@@ -1,4 +1,5 @@
 import { InsightType } from '../../insight';
+import { LifeArea } from '../../life-theme';
 
 export interface InsightLog {
   id: string;
@@ -13,7 +14,7 @@ export interface InsightLog {
     house?: number;
     orb?: number;
     lifeThemeKey?: string;
-    focusArea?: string;
+    lifeArea?: LifeArea;
     transitAspect?: string;
     transitCount?: number;
     themeCount?: number;

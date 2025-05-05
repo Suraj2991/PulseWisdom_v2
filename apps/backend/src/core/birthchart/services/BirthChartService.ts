@@ -2,7 +2,7 @@ import { ICache } from '../../../infrastructure/cache/ICache';
 import { EphemerisService, DateTime, GeoPosition, CelestialBody, Houses, HouseSystem } from '../../ephemeris';
 import { ObjectId } from 'mongodb';
 import { IBirthChart, BirthChartDocument } from '../types/birthChart.types';
-import { NotFoundError, ValidationError, AppError, ServiceError } from '../../../domain/errors';
+import { NotFoundError, ValidationError, ServiceError } from '../../../domain/errors';
 import { logger } from '../../../shared/logger';
 import { BirthChartModel } from '../../birthchart';
 
@@ -167,7 +167,7 @@ export class BirthChartService {
     }
   }
 
-  async calculateBirthChart(datetime: DateTime, location: GeoPosition, houseSystem?: HouseSystem): Promise<{
+  async calculateBirthChart(datetime: DateTime, location: GeoPosition, _houseSystem?: HouseSystem): Promise<{
     bodies: CelestialBody[];
     houses: Houses;
     aspects: Array<{

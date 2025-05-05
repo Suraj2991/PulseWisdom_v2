@@ -1,6 +1,10 @@
-import { Planet, Aspect } from '../../../core/ephemeris/types/ephemeris.types';
+import { Planet } from '../../../core/ephemeris/types/ephemeris.types';
 import { Transit } from '../../transit/types/transit.types';
 import { ObjectId } from 'mongodb';
+import { LifeArea } from '../../life-theme';
+import { WindowType } from '../../transit/services/TransitClassifier';
+import { BirthChartDocument } from '../../birthchart';
+import { LifeThemeKey } from '../../life-theme';
 
 export enum InsightSeverity {
   LOW = 'LOW',
@@ -154,6 +158,7 @@ export interface PatternInsight extends BaseInsight {
   supportingFactors: string[];
   challenges: string[];
   recommendations: string[];
+  generationMetadata?: GenerationMetadata;
 }
 
 export interface LifeThemeInsight extends BaseInsight {
@@ -164,6 +169,7 @@ export interface LifeThemeInsight extends BaseInsight {
 export interface TransitInsight extends BaseInsight {
   type: InsightType.TRANSIT;
   transitId: string;
+  generationMetadata?: GenerationMetadata;
 }
 
 export interface BirthChartInsight extends BaseInsight {
@@ -171,13 +177,21 @@ export interface BirthChartInsight extends BaseInsight {
   chartId: string;
 }
 
+export interface GenerationMetadata {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  generationTime: number;
+}
+
 export interface DailyInsight extends BaseInsight {
   type: InsightType.DAILY;
   date: Date;
   transits: Transit[];
-  focusArea?: string;
+  lifeArea?: LifeArea;
   transitAspect?: string;
   triggeredBy?: string;
+  generationMetadata?: GenerationMetadata;
 }
 
 export interface WeeklyDigestInsight extends BaseInsight {
@@ -188,6 +202,7 @@ export interface WeeklyDigestInsight extends BaseInsight {
   opportunities: string[];
   challenges: string[];
   recommendations: string[];
+  generationMetadata?: GenerationMetadata;
 }
 
 export interface ThemeForecastInsight extends BaseInsight {
@@ -206,6 +221,7 @@ export interface ThemeForecastInsight extends BaseInsight {
   supportingFactors: string[];
   challenges: string[];
   recommendations: string[];
+  generationMetadata?: GenerationMetadata;
 }
 
 export interface NodePathInsight extends BaseInsight {
@@ -243,6 +259,7 @@ export interface InsightAnalysis {
   overallSummary: string;
   createdAt: Date;
   updatedAt: Date;
+  birthChart?: BirthChartDocument;
   planets?: Array<{
     id: number;
     sign: string;
@@ -269,7 +286,7 @@ export interface InsightAnalysis {
     }>;
   }>;
   transits?: Transit[];
-  focusArea?: string;
+  lifeArea?: LifeArea;
   transitAspect?: string;
   triggeredBy?: string;
   majorThemes?: string[];
@@ -282,6 +299,7 @@ export interface InsightAnalysis {
     description: string;
     probability?: number;
     impact?: InsightSeverity;
+    themeKey?: LifeThemeKey;
   }>;
   supportingFactors?: string[];
   relevance?: number;
@@ -310,7 +328,7 @@ export interface InsightMetadata {
   house?: number;
   orb?: number;
   lifeThemeKey?: string;
-  focusArea?: string;
+  lifeArea?: LifeArea;
   transitAspect?: string;
   transitCount?: number;
   themeCount?: number;
@@ -344,10 +362,14 @@ export interface InsightLog {
   content: string;
   generatedAt: Date;
   metadata?: InsightMetadata;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  generationTime?: number;
 }
 
 export interface TimingWindow {
-  type: 'Opportunity' | 'Challenge' | 'Integration';
+  type: WindowType;
   title: string;
   startDate: Date;
   endDate: Date;

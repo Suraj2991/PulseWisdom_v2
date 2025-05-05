@@ -1,10 +1,30 @@
-import { DateTime, GeoPosition, BirthChart, CelestialBody, HouseSystem } from '../types/ephemeris.types';
+import { DateTime, GeoPosition, BirthChart, CelestialBody } from '../types/ephemeris.types';
 import { TransitWindow, TransitAspect } from '../../transit';
 import axios, { AxiosInstance } from 'axios';
 import { ServiceUnavailableError, CalculationError } from '../../../domain/errors';
 import { IEphemerisClient, EphemerisRequest, AspectResponse, HouseResponse } from '../ports/IEphemerisClient';
 import { config } from '../../../shared/config';
 import { logger } from '../../../shared/logger';
+
+interface LunarPhase {
+  date: DateTime;
+  phase: string;
+  illumination: number;
+}
+
+interface FixedStar {
+  name: string;
+  longitude: number;
+  latitude: number;
+  magnitude: number;
+}
+
+interface SignificantEvent {
+  date: DateTime;
+  type: string;
+  description: string;
+  bodies: string[];
+}
 
 export class KerykeionClient implements IEphemerisClient {
   private client: AxiosInstance;
@@ -29,7 +49,7 @@ export class KerykeionClient implements IEphemerisClient {
         const response = await this.client.post('/positions', request);
         return response.data;
       } catch (error) {
-        throw await this.handleApiError(error);
+        throw this.handleApiError(error);
       }
     });
   }
@@ -40,7 +60,7 @@ export class KerykeionClient implements IEphemerisClient {
         const response = await this.client.post('/aspects', { positions });
         return response.data;
       } catch (error) {
-        throw await this.handleApiError(error);
+        throw this.handleApiError(error);
       }
     });
   }
@@ -51,7 +71,7 @@ export class KerykeionClient implements IEphemerisClient {
         const response = await this.client.post('/houses', request);
         return response.data;
       } catch (error) {
-        throw await this.handleApiError(error);
+        throw this.handleApiError(error);
       }
     });
   }
@@ -65,7 +85,7 @@ export class KerykeionClient implements IEphemerisClient {
         });
         return response.data;
       } catch (error) {
-        throw await this.handleApiError(error);
+        throw this.handleApiError(error);
       }
     });
   }
@@ -79,7 +99,7 @@ export class KerykeionClient implements IEphemerisClient {
         });
         return response.data;
       } catch (error) {
-        throw await this.handleApiError(error);
+        throw this.handleApiError(error);
       }
     });
   }
@@ -93,7 +113,7 @@ export class KerykeionClient implements IEphemerisClient {
         });
         return response.data;
       } catch (error) {
-        throw await this.handleApiError(error);
+        throw this.handleApiError(error);
       }
     });
   }
@@ -105,11 +125,11 @@ export class KerykeionClient implements IEphemerisClient {
       });
       return response.data;
     } catch (error) {
-      return this.handleApiError(error);
+      throw this.handleApiError(error);
     }
   }
 
-  async calculateLunarPhases(startDate: DateTime, endDate: DateTime): Promise<any[]> {
+  async calculateLunarPhases(startDate: DateTime, endDate: DateTime): Promise<LunarPhase[]> {
     try {
       const response = await this.client.post('/lunar-phases', {
         startDate,
@@ -117,22 +137,22 @@ export class KerykeionClient implements IEphemerisClient {
       });
       return response.data;
     } catch (error) {
-      return this.handleApiError(error);
+      throw this.handleApiError(error);
     }
   }
 
-  async calculateFixedStars(date: DateTime): Promise<any[]> {
+  async calculateFixedStars(date: DateTime): Promise<FixedStar[]> {
     try {
       const response = await this.client.post('/fixed-stars', {
         date
       });
       return response.data;
     } catch (error) {
-      return this.handleApiError(error);
+      throw this.handleApiError(error);
     }
   }
 
-  async calculateSignificantEvents(startDate: DateTime, endDate: DateTime): Promise<any[]> {
+  async calculateSignificantEvents(startDate: DateTime, endDate: DateTime): Promise<SignificantEvent[]> {
     try {
       const response = await this.client.post('/significant-events', {
         startDate,
@@ -140,7 +160,7 @@ export class KerykeionClient implements IEphemerisClient {
       });
       return response.data;
     } catch (error) {
-      return this.handleApiError(error);
+      throw this.handleApiError(error);
     }
   }
 
@@ -169,7 +189,7 @@ export class KerykeionClient implements IEphemerisClient {
     throw lastError;
   }
 
-  private async handleApiError(error: any): Promise<never> {
+  private handleApiError(error: unknown): never {
     logger.error('KerykeionClient API error:', { error });
     
     if (axios.isAxiosError(error)) {

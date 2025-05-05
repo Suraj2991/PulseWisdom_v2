@@ -1,7 +1,10 @@
+import { LifeArea } from '../life-theme';
+import { WindowType } from '../transit/services/TransitClassifier';
+
 export interface TimingWindow {
   startDate: Date;
   endDate: Date;
-  type: 'Opportunity' | 'Integration' | 'Challenge' | 'Growth';
+  type: WindowType | 'Growth';
   title: string;
   description: string;
   involvedPlanets: string[];
@@ -30,7 +33,7 @@ export interface InsightLog {
   content: string;
   metadata: {
     date: Date;
-    focusArea?: string;
+    lifeArea?: LifeArea;
     planet?: string;
     sign?: string;
     house?: number;

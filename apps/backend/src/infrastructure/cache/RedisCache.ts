@@ -2,8 +2,9 @@ import { createClient, RedisClientType } from 'redis';
 import { ICache } from './ICache';
 import { ServiceError } from '../../domain/errors';
 import { CelestialBody } from '../../core/ephemeris/types/ephemeris.types';
-import { CacheError } from '../../domain/errors';
 import { logger } from '../../shared/logger';
+import { IBirthChart } from '../../core/birthchart/types/birthChart.types';
+import { IInsight } from '../../core/insight/types/insight.types';
 
 export class RedisCache implements ICache {
   private client: RedisClientType;
@@ -72,6 +73,10 @@ export class RedisCache implements ICache {
     }
   }
 
+  async del(key: string): Promise<void> {
+    return this.delete(key);
+  }
+
   async delete(key: string): Promise<void> {
     try {
       await this.client.del(key);
@@ -123,7 +128,7 @@ export class RedisCache implements ICache {
     }
   }
 
-  async getBirthChart(id: string): Promise<any | null> {
+  async getBirthChart(id: string): Promise<IBirthChart | null> {
     try {
       const data = await this.client.get(`${this.BIRTH_CHART_KEY_PREFIX}${id}`);
       return data ? JSON.parse(data) : null;
@@ -133,7 +138,7 @@ export class RedisCache implements ICache {
     }
   }
 
-  async setBirthChart(id: string, data: any): Promise<void> {
+  async setBirthChart(id: string, data: IBirthChart): Promise<void> {
     try {
       await this.client.setEx(
         `${this.BIRTH_CHART_KEY_PREFIX}${id}`,
@@ -155,7 +160,7 @@ export class RedisCache implements ICache {
     }
   }
 
-  async getInsight(id: string): Promise<any | null> {
+  async getInsight(id: string): Promise<IInsight | null> {
     try {
       const data = await this.client.get(`${this.INSIGHT_KEY_PREFIX}${id}`);
       return data ? JSON.parse(data) : null;
@@ -165,7 +170,7 @@ export class RedisCache implements ICache {
     }
   }
 
-  async setInsight(id: string, data: any): Promise<void> {
+  async setInsight(id: string, data: IInsight): Promise<void> {
     try {
       await this.client.setEx(
         `${this.INSIGHT_KEY_PREFIX}${id}`,

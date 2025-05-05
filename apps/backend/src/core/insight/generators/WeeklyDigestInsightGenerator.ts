@@ -16,12 +16,27 @@ export class WeeklyDigestInsightGenerator extends BaseInsightGenerator<WeeklyDig
     try {
       const insights: WeeklyDigestInsight[] = [];
       
-      if (!analysis.content) {
+      if (!analysis.birthChart || !analysis.transits) {
+        logger.warn('Missing required data for weekly digest generation', {
+          hasBirthChart: !!analysis.birthChart,
+          hasTransits: !!analysis.transits
+        });
         return insights;
       }
 
+      const weekStart = new Date();
+      const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      // Generate weekly digest using AI service
+      const { insight: weeklyInsight, log: insightLog } = await this.aiService.generateWeeklyDigest(
+        analysis.birthChart,
+        analysis.transits,
+        weekStart,
+        []  // Optional transit insights
+      );
+
       const baseInsight = this.createBaseInsight(
-        analysis.content,
+        weeklyInsight,
         InsightCategory.WEEKLY_GUIDANCE,
         InsightSeverity.MEDIUM
       );
@@ -29,12 +44,18 @@ export class WeeklyDigestInsightGenerator extends BaseInsightGenerator<WeeklyDig
       const insight: WeeklyDigestInsight = {
         ...baseInsight,
         type: this.type,
-        weekStart: new Date(),
-        weekEnd: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        weekStart,
+        weekEnd,
         majorThemes: analysis.majorThemes || [],
         opportunities: analysis.opportunities || [],
         challenges: analysis.challenges || [],
-        recommendations: analysis.recommendations || []
+        recommendations: analysis.recommendations || [],
+        generationMetadata: {
+          promptTokens: insightLog.promptTokens || 0,
+          completionTokens: insightLog.completionTokens || 0,
+          totalTokens: insightLog.totalTokens || 0,
+          generationTime: insightLog.generationTime || 0
+        }
       };
 
       insights.push(insight);

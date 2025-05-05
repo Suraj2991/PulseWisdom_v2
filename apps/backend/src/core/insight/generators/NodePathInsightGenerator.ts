@@ -2,13 +2,14 @@ import { BaseInsightGenerator } from './BaseInsightGenerator';
 import { AIService, PromptBuilder } from '../../ai';
 import { logger } from '../../../shared/logger';
 import { ServiceError } from '../../../domain/errors';
-import { adaptBirthChartData } from '../../birthchart/adapters/BirthChart.adapters';
 import { NodePathInsight, InsightType, InsightCategory, InsightSeverity, InsightAnalysis } from '../types/insight.types';
+import { BirthChartService } from '../../birthchart';
 
 export class NodePathInsightGenerator extends BaseInsightGenerator<NodePathInsight> {
   constructor(
     private readonly aiService: AIService,
-    private readonly promptBuilder: PromptBuilder
+    private readonly promptBuilder: PromptBuilder,
+    private readonly birthChartService: BirthChartService
   ) {
     super(InsightType.NODE_PATH);
   }
@@ -28,20 +29,13 @@ export class NodePathInsightGenerator extends BaseInsightGenerator<NodePathInsig
         return [];
       }
       
-      const prompt = PromptBuilder.buildNodeInsightPrompt({
-        northNode: {
-          sign: northNode.sign,
-          house: northNode.house,
-          degree: northNode.degree
-        },
-        southNode: {
-          sign: southNode.sign,
-          house: southNode.house,
-          degree: southNode.degree
-        }
-      }, true);
-      
-      const insight = await this.aiService.generateResponse(prompt);
+      // Get birth chart document
+      const birthChart = await this.birthChartService.getBirthChartById(analysis.birthChartId);
+      if (!birthChart) {
+        throw new ServiceError(`Birth chart not found: ${analysis.birthChartId}`);
+      }
+
+      const { insight } = await this.aiService.generateNodeInsight(birthChart);
       
       const baseInsight = this.createBaseInsight(
         insight,

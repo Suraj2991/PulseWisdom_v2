@@ -242,7 +242,7 @@ export class InsightRepository implements InsightRepositoryInterface {
   }
 
   // Type guards and validators
-  private isValidInsightAnalysis(obj: unknown): obj is InsightAnalysis {
+  private isValidInsightAnalysis = (obj: unknown): obj is InsightAnalysis => {
     if (!obj || typeof obj !== 'object') return false;
     const analysis = obj as Record<string, unknown>;
     return (
@@ -255,9 +255,9 @@ export class InsightRepository implements InsightRepositoryInterface {
       analysis.createdAt instanceof Date &&
       analysis.updatedAt instanceof Date
     );
-  }
+  };
 
-  private isValidInsight(obj: unknown): obj is Insight {
+  private isValidInsight = (obj: unknown): obj is Insight => {
     if (!obj || typeof obj !== 'object') return false;
     const insight = obj as Record<string, unknown>;
     return (
@@ -269,9 +269,9 @@ export class InsightRepository implements InsightRepositoryInterface {
       typeof insight.description === 'string' &&
       insight.date instanceof Date
     );
-  }
+  };
 
-  private isValidIInsight(obj: unknown): obj is IInsight {
+  private isValidIInsight = (obj: unknown): obj is IInsight => {
     if (!obj || typeof obj !== 'object') return false;
     const insight = obj as Record<string, unknown>;
     return (
@@ -286,10 +286,10 @@ export class InsightRepository implements InsightRepositoryInterface {
       insight.updatedAt instanceof Date &&
       (!insight.tags || Array.isArray(insight.tags))
     );
-  }
+  };
 
   // Type converters
-  private convertToInsight(iInsight: IInsight): Insight {
+  private convertToInsight = (iInsight: IInsight): Insight => {
     const baseInsight: BaseInsight = {
       id: iInsight._id.toString(),
       type: iInsight.type,
@@ -308,9 +308,9 @@ export class InsightRepository implements InsightRepositoryInterface {
       moonSign: '',
       ascendantSign: ''
     };
-  }
+  };
 
-  private convertToIInsight(insight: Insight): IInsight {
+  private convertToIInsight = (insight: Insight): IInsight => {
     return {
       _id: new ObjectId(insight.id),
       content: insight.content,
@@ -327,5 +327,5 @@ export class InsightRepository implements InsightRepositoryInterface {
       updatedAt: insight.updatedAt,
       tags: [] // Initialize with empty array
     };
-  }
+  };
 } 

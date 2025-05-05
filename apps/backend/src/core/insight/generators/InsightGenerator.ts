@@ -4,25 +4,18 @@ import { AppError } from '../../../domain/errors';
 import { ICache } from '../../../infrastructure/cache/ICache';
 import { InsightLog } from '../../ai/types/personalization.types';
 import { BirthChartDocument } from '../../birthchart/types/birthChart.types';
-import { BirthChart } from '../../ephemeris/types/ephemeris.types';
 import { Transit } from '../../transit';
 import { ServiceError } from '../../../domain/errors';
-import { PromptBuilder, LLMClient } from '../../ai';
-import { adaptBirthChartData } from '../../birthchart/adapters/BirthChart.adapters';
 import { InsightAnalysis, Insight, InsightType, InsightCategory, InsightSeverity, InsightCacheKey } from '../types/insight.types';
-import { InsightRepository } from '../repositories/InsightRepository';
 import { InsightGeneratorFactory } from './InsightGeneratorFactory';
-import { getPrimaryTransit, createInsightLog, determineTransitFocusArea, determineTransitTrigger } from '../utils/insight.utils';
+import { getPrimaryTransit, createInsightLog, determineTransitLifeArea, determineTransitTrigger } from '../utils/insight.utils';
 
 export class InsightGenerator {
   private readonly CACHE_PREFIX = 'insight:';
 
   constructor(
     private readonly cache: ICache,
-    private readonly aiService: AIService,
-    private readonly promptBuilder: PromptBuilder,
-    private readonly llmClient: LLMClient,
-    private readonly insightRepository: InsightRepository
+    private readonly aiService: AIService
   ) {}
 
   private getCacheKey(type: InsightCacheKey, id: string): string {
@@ -31,13 +24,13 @@ export class InsightGenerator {
 
   async generateDailyInsight(birthChart: BirthChartDocument): Promise<Insight> {
     try {
-      const { insight } = await this.getOrGenerateDailyInsight(birthChart, [], new Date());
+      const result = await this.getOrGenerateDailyInsight(birthChart, [], new Date());
       const generator = InsightGeneratorFactory.getGenerator(InsightType.DAILY);
       const insights = await generator.generate({
         birthChartId: birthChart._id.toString(),
         userId: birthChart.userId.toString(),
         type: InsightType.DAILY,
-        content: insight,
+        content: result.insight,
         insights: [],
         overallSummary: '',
         createdAt: new Date(),
@@ -170,17 +163,15 @@ export class InsightGenerator {
         transitCount: transits.length
       });
       
-      const prompt = PromptBuilder.buildDailyInsightPrompt(adaptBirthChartData(birthChart), transits, currentDate, true);
-      const insight = await this.aiService.generateResponse(prompt);
+      const result = await this.aiService.getOrGenerateDailyInsight(birthChart, transits, currentDate);
       
       const primaryTransit = getPrimaryTransit(transits);
-      const insightLog = createInsightLog(InsightType.DAILY, insight, {
+      const insightLog = createInsightLog(InsightType.DAILY, result.insight, {
         date: currentDate,
-        focusArea: primaryTransit ? determineTransitFocusArea(primaryTransit) : undefined,
-        transitAspect: primaryTransit ? `${primaryTransit.planet} ${primaryTransit.type} ${primaryTransit.aspectingNatal?.name}` : undefined,
-        triggeredBy: primaryTransit ? determineTransitTrigger(primaryTransit) : undefined,
+        lifeArea: primaryTransit ? determineTransitLifeArea(primaryTransit) : undefined,
+        transitAspect: primaryTransit?.type,
         transitCount: transits.length,
-        activePlanets: [...new Set(transits.map(t => t.planet))]
+        triggeredBy: primaryTransit ? determineTransitTrigger(primaryTransit) : undefined
       });
 
       logger.info('Completed daily insight generation', { 
@@ -190,7 +181,7 @@ export class InsightGenerator {
         date: currentDate.toISOString()
       });
       
-      return { insight, insightLog };
+      return { insight: result.insight, insightLog };
     } catch (error) {
       logger.error('Failed to generate daily insight', { 
         error,

@@ -217,16 +217,24 @@ const tokenVerifier: ITokenVerifier = {
 router.use(createAuthMiddleware(tokenVerifier));
 
 // Profile route (should be before :userId routes)
-router.get('/profile', (req: Request, res: Response, next: NextFunction) => {
-  userController.getUserById(req, res, next);
+router.get('/profile', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await userController.getUserById(req, res, next);
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Search route (should be before :userId routes)
 router.get(
   '/search',
   validateRequest(searchSchema),
-  (req: Request, res: Response, next: NextFunction) => {
-    userController.searchUsers(req, res, next);
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await userController.searchUsers(req, res, next);
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
@@ -234,8 +242,12 @@ router.get(
 router.get(
   '/email/:email',
   validateRequest(emailSchema),
-  (req: Request, res: Response, next: NextFunction) => {
-    userController.getUserByEmail(req, res, next);
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await userController.getUserByEmail(req, res, next);
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
@@ -243,8 +255,12 @@ router.get(
 router.get(
   '/:userId',
   validateRequest(userIdSchema),
-  (req: Request, res: Response, next: NextFunction) => {
-    userController.getUserById(req, res, next);
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await userController.getUserById(req, res, next);
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
@@ -253,16 +269,24 @@ router.put(
   createAuthMiddleware(tokenVerifier) as RequestHandler,
   normalizeUserData,
   validateRequest(updateUserSchema),
-  (req: Request, res: Response, next: NextFunction) => {
-    userController.updateUser(req, res, next);
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await userController.updateUser(req, res, next);
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
 router.delete(
   '/:userId',
   validateRequest(userIdSchema),
-  (req: Request, res: Response, next: NextFunction) => {
-    userController.deleteUser(req, res, next);
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await userController.deleteUser(req, res, next);
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
@@ -272,8 +296,12 @@ router.put(
   createAuthMiddleware(tokenVerifier) as RequestHandler,
   normalizeUserData,
   validateRequest(updatePreferencesSchema),
-  (req: Request, res: Response, next: NextFunction) => {
-    userController.updatePreferences(req, res, next);
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await userController.updatePreferences(req, res, next);
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
@@ -281,8 +309,12 @@ router.put(
 router.get(
   '/:userId/birth-charts',
   validateRequest(userIdSchema),
-  (req: Request, res: Response, next: NextFunction) => {
-    userController.getUserBirthCharts(req, res, next);
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await userController.getUserBirthCharts(req, res, next);
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
@@ -290,13 +322,17 @@ router.get(
 router.post(
   '/:userId/validate-password',
   validateRequest(validatePasswordSchema),
-  (req: Request, res: Response, next: NextFunction) => {
-    userController.validatePassword(req, res, next);
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await userController.validatePassword(req, res, next);
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
 // Error handling middleware should be last
-router.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+router.use((err: Error & { status?: number }, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
   res.status(err.status || 500).json({
     status: 'error',

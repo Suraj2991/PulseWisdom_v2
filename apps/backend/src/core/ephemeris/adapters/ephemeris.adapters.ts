@@ -55,14 +55,14 @@ export class EphemerisAdapter {
    */
   static toDomainCelestialBody(position: CelestialPosition, name: string, house = 1): CelestialBody {
     return {
-      id: 0, // This should be assigned by the service layer
+      id: 0, // Default id since it's optional in CelestialPosition
       name,
       longitude: position.longitude,
       latitude: position.latitude,
       speed: position.speed,
       house,
       sign: this.getSignFromLongitude(position.longitude),
-      signLongitude: this.getSignLongitude(position.longitude)
+      retrograde: position.speed < 0
     };
   }
 
@@ -101,11 +101,16 @@ export class EphemerisAdapter {
   /**
    * Type guard for CelestialPosition
    */
-  private static isCelestialPosition(value: any): value is CelestialPosition {
-    return value && typeof value === 'object' && 
-           'longitude' in value && typeof value.longitude === 'number' &&
-           'latitude' in value && typeof value.latitude === 'number' &&
-           'speed' in value && typeof value.speed === 'number';
+  private static isCelestialPosition(value: unknown): value is CelestialPosition {
+    return Boolean(value) && 
+           typeof value === 'object' && 
+           value !== null &&
+           'longitude' in value &&
+           'latitude' in value &&
+           'speed' in value &&
+           typeof (value as Record<string, unknown>).longitude === 'number' &&
+           typeof (value as Record<string, unknown>).latitude === 'number' &&
+           typeof (value as Record<string, unknown>).speed === 'number';
   }
 
   /**

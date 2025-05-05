@@ -8,6 +8,7 @@ interface Config {
   jwtRefreshSecret: string;
   jwtExpiresIn: string;
   jwtRefreshExpiresIn: string;
+  emailVerificationSecret: string;
 
   // Database
   mongoUri: string;
@@ -100,6 +101,7 @@ export const config: Config = {
   jwtRefreshSecret: validateEnvVar('JWT_REFRESH_SECRET', process.env.JWT_REFRESH_SECRET),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
   jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+  emailVerificationSecret: validateEnvVar('EMAIL_VERIFICATION_SECRET', process.env.EMAIL_VERIFICATION_SECRET),
 
   // Database
   mongoUri: validateEnvVar('MONGO_URI', process.env.MONGO_URI),

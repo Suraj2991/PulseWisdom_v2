@@ -1,8 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { ValidationError } from '../../domain/errors';
+import { ParamsDictionary } from 'express-serve-static-core';
+import { ParsedQs } from 'qs';
 
-export const validateRequest = (schema: z.ZodType<any>) => {
+interface RequestData {
+  body?: unknown;
+  params?: ParamsDictionary;
+  query?: ParsedQs;
+}
+
+export const validateRequest = <T extends RequestData>(schema: z.ZodType<T>) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const dataToValidate = {
@@ -33,7 +41,9 @@ export const validateRequest = (schema: z.ZodType<any>) => {
 
         const validationError = new ValidationError(errorMessage);
         validationError.statusCode = 400;
-        validationError.details = errors;
+        validationError.details = {
+          errors: errors.map(err => ({ ...err }))
+        };
         
         next(validationError);
         return;

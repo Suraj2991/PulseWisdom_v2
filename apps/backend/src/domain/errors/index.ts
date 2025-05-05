@@ -1,4 +1,11 @@
 /**
+ * Type for error details that can include various data types
+ */
+export type ErrorDetails = {
+  [key: string]: unknown;
+} | string[] | null;
+
+/**
  * Base error class for all application errors
  */
 export class AppError extends Error {
@@ -6,7 +13,7 @@ export class AppError extends Error {
     message: string,
     public code: string = 'INTERNAL_ERROR',
     public statusCode: number = 500,
-    public details?: any
+    public details?: ErrorDetails
   ) {
     super(message);
     this.name = this.constructor.name;
@@ -21,7 +28,7 @@ export class DomainError extends AppError {
     message: string,
     code = 'DOMAIN_ERROR',
     statusCode = 400,
-    details?: any
+    details?: ErrorDetails
   ) {
     super(message, code, statusCode, details);
   }
@@ -34,7 +41,7 @@ export class AstrologicalError extends DomainError {
   constructor(
     message: string,
     code = 'ASTROLOGICAL_ERROR',
-    details?: any
+    details?: ErrorDetails
   ) {
     super(message, code, 400, details);
   }
@@ -44,7 +51,7 @@ export class AstrologicalError extends DomainError {
  * Error thrown when calculations fail
  */
 export class CalculationError extends AstrologicalError {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: ErrorDetails) {
     super(message, 'CALCULATION_ERROR', details);
   }
 }
@@ -53,7 +60,7 @@ export class CalculationError extends AstrologicalError {
  * Error thrown when validation fails
  */
 export class ValidationError extends DomainError {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: ErrorDetails) {
     super(message, 'VALIDATION_ERROR', 400, details);
   }
 }
@@ -62,7 +69,7 @@ export class ValidationError extends DomainError {
  * Error thrown when database operations fail
  */
 export class DatabaseError extends AppError {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: ErrorDetails) {
     super(message, 'DATABASE_ERROR', 500, details);
   }
 }
@@ -71,7 +78,7 @@ export class DatabaseError extends AppError {
  * Error thrown when cache operations fail
  */
 export class CacheError extends AppError {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: ErrorDetails) {
     super(message, 'CACHE_ERROR', 500, details);
   }
 }
@@ -80,7 +87,7 @@ export class CacheError extends AppError {
  * Error thrown when a resource is not found
  */
 export class NotFoundError extends AppError {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: ErrorDetails) {
     super(message, 'NOT_FOUND', 404, details);
   }
 }
@@ -89,7 +96,7 @@ export class NotFoundError extends AppError {
  * Error thrown when configuration is invalid
  */
 export class ConfigurationError extends AppError {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: ErrorDetails) {
     super(message, 'CONFIGURATION_ERROR', 500, details);
   }
 }
@@ -98,7 +105,7 @@ export class ConfigurationError extends AppError {
  * Error thrown for authentication/authorization failures
  */
 export class AuthError extends AppError {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: ErrorDetails) {
     super(message, 'AUTH_ERROR', 401, details);
   }
 }
@@ -107,7 +114,7 @@ export class AuthError extends AppError {
  * Error thrown for authorization failures
  */
 export class AuthorizationError extends AuthError {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: ErrorDetails) {
     super(message, details);
     this.code = 'AUTHORIZATION_ERROR';
     this.statusCode = 403;
@@ -118,7 +125,7 @@ export class AuthorizationError extends AuthError {
  * Error thrown when rate limiting is exceeded
  */
 export class RateLimitError extends AppError {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: ErrorDetails) {
     super(message, 'RATE_LIMIT_ERROR', 429, details);
   }
 }
@@ -127,7 +134,7 @@ export class RateLimitError extends AppError {
  * Error thrown when a service is unavailable
  */
 export class ServiceUnavailableError extends AppError {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: ErrorDetails) {
     super(message, 'SERVICE_UNAVAILABLE', 503, details);
   }
 }

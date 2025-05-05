@@ -100,18 +100,23 @@ export class UserService {
     try {
       validateUserRegistration(userData);
       
+      // Validate required fields
+      if (!userData.password || !userData.email || !userData.firstName || !userData.lastName) {
+        throw new ValidationError('Missing required user data');
+      }
+      
       // Validate role if provided
       if (userData.role && !Object.values(USER_ROLES).includes(userData.role)) {
         throw new ValidationError('Invalid user role');
       }
       
-      const hashedPassword = await bcrypt.hash(userData.password!, 10);
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
       const user = await this.userRepository.createUser({
         ...userData,
         password: hashedPassword,
-        email: userData.email!.toLowerCase(),
-        firstName: userData.firstName!,
-        lastName: userData.lastName!,
+        email: userData.email.toLowerCase(),
+        firstName: userData.firstName,
+        lastName: userData.lastName,
         role: userData.role || USER_ROLES.USER,
         status: USER_STATUS.ACTIVE,
         isEmailVerified: false,

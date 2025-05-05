@@ -8,7 +8,7 @@ export interface IEventBus {
    * @param eventName The name of the event to publish
    * @param data The data to publish with the event
    */
-  publish(eventName: string, data: any): void;
+  publish<T>(eventName: string, data: T): void;
 
   /**
    * Subscribes to an event
@@ -16,12 +16,12 @@ export interface IEventBus {
    * @param callback The callback function to execute when the event is published
    * @returns A function to unsubscribe from the event
    */
-  subscribe(eventName: string, callback: (data: any) => void): () => void;
+  subscribe<T>(eventName: string, callback: (data: T) => void): () => void;
 
   /**
    * Unsubscribes from an event
    * @param eventName The name of the event to unsubscribe from
    * @param callback The callback function to remove
    */
-  unsubscribe(eventName: string, callback: (data: any) => void): void;
+  unsubscribe<T>(eventName: string, callback: (data: T) => void): void;
 } 

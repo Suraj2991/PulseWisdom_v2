@@ -3,50 +3,88 @@ import { AuthService } from '../services/AuthService';
 import { ValidationError, AuthError, NotFoundError } from '../../../domain/errors';
 import { ChangePasswordData, LoginData, RegisterData, TokenResponse, AuthRequest } from '../types/auth.types';
 
+// Define specific validation error details type
+type ValidationErrorDetails = {
+  [key: string]: string[] | undefined;
+} | string[];
+
+interface ErrorResponse {
+  status: 'error';
+  message: string;
+  details?: ValidationErrorDetails;
+}
+
+interface SuccessResponse<T> {
+  status: 'success';
+  message: string;
+  data?: T;
+}
+
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   private handleError(error: unknown, res: Response): void {
     if (error instanceof ValidationError) {
-      res.status(400).json({
+      const details = error.details as ValidationErrorDetails;
+      const safeDetails = Array.isArray(details) ? details :
+        (details && typeof details === 'object') ? details :
+        undefined;
+
+      const response: ErrorResponse = {
         status: 'error',
-        message: error.message,
-        details: error.details
-      });
+        message: String(error.message),
+        ...(safeDetails && { details: safeDetails })
+      };
+
+      res.status(400).json(response);
       return;
     }
+
     if (error instanceof AuthError) {
-      res.status(401).json({
+      const response: ErrorResponse = {
         status: 'error',
-        message: error.message
-      });
+        message: String(error.message)
+      };
+
+      res.status(401).json(response);
       return;
     }
+
     if (error instanceof NotFoundError) {
-      res.status(404).json({
+      const response: ErrorResponse = {
         status: 'error',
-        message: error.message
-      });
+        message: String(error.message)
+      };
+
+      res.status(404).json(response);
       return;
     }
-    res.status(500).json({
+
+    // Log unexpected errors
+    const errorMessage = error instanceof Error ? String(error.message) : String(error);
+    console.error('Unexpected error:', errorMessage);
+
+    const response: ErrorResponse = {
       status: 'error',
       message: 'Internal server error'
-    });
+    };
+
+    res.status(500).json(response);
   }
 
   /**
    * Register a new user
    */
-  public register = async (req: Request, res: Response): Promise<void> => {
+  public register = async (req: Request<unknown, unknown, RegisterData>, res: Response): Promise<void> => {
     try {
-      const registerData: RegisterData = req.body;
+      const registerData = req.body;
       const result = await this.authService.register(registerData);
-      res.status(201).json({
+      const response: SuccessResponse<typeof result> = {
         status: 'success',
         message: 'User registered successfully',
         data: result
-      });
+      };
+      res.status(201).json(response);
     } catch (error) {
       this.handleError(error, res);
     }
@@ -55,15 +93,16 @@ export class AuthController {
   /**
    * Login user
    */
-  public login = async (req: Request, res: Response): Promise<void> => {
+  public login = async (req: Request<unknown, unknown, LoginData>, res: Response): Promise<void> => {
     try {
-      const loginData: LoginData = req.body;
+      const loginData = req.body;
       const result = await this.authService.login(loginData);
-      res.status(200).json({
+      const response: SuccessResponse<typeof result> = {
         status: 'success',
         message: 'Login successful',
         data: result
-      });
+      };
+      res.status(200).json(response);
     } catch (error) {
       this.handleError(error, res);
     }
@@ -81,16 +120,17 @@ export class AuthController {
 
       const { currentPassword, newPassword } = req.body;
       const changePasswordData: ChangePasswordData = {
-        userId,
+        email: req.user?.email ?? '',
         currentPassword,
         newPassword
       };
 
       await this.authService.changePassword(changePasswordData);
-      res.status(200).json({
+      const response: SuccessResponse<void> = {
         status: 'success',
         message: 'Password changed successfully'
-      });
+      };
+      res.status(200).json(response);
     } catch (error) {
       this.handleError(error, res);
     }
@@ -107,10 +147,11 @@ export class AuthController {
       }
 
       await this.authService.logout(token);
-      res.status(200).json({
+      const response: SuccessResponse<void> = {
         status: 'success',
         message: 'Logged out successfully'
-      });
+      };
+      res.status(200).json(response);
     } catch (error) {
       this.handleError(error, res);
     }
@@ -119,7 +160,7 @@ export class AuthController {
   /**
    * Generate password reset token
    */
-  public generatePasswordResetToken = async (req: Request, res: Response): Promise<void> => {
+  public generatePasswordResetToken = async (req: Request<unknown, unknown, { email: string }>, res: Response): Promise<void> => {
     try {
       const { email } = req.body;
       if (!email) {
@@ -127,11 +168,12 @@ export class AuthController {
       }
 
       const token = await this.authService.generatePasswordResetToken(email);
-      res.status(200).json({
+      const response: SuccessResponse<{ token: string }> = {
         status: 'success',
         message: 'Password reset email sent',
         data: { token }
-      });
+      };
+      res.status(200).json(response);
     } catch (error) {
       this.handleError(error, res);
     }
@@ -140,7 +182,10 @@ export class AuthController {
   /**
    * Reset password using token
    */
-  public resetPassword = async (req: Request, res: Response): Promise<void> => {
+  public resetPassword = async (
+    req: Request<{ token: string }, unknown, { newPassword: string }>,
+    res: Response
+  ): Promise<void> => {
     try {
       const { token } = req.params;
       const { newPassword } = req.body;
@@ -150,10 +195,11 @@ export class AuthController {
       }
 
       await this.authService.resetPassword(token, newPassword);
-      res.status(200).json({
+      const response: SuccessResponse<void> = {
         status: 'success',
         message: 'Password reset successful'
-      });
+      };
+      res.status(200).json(response);
     } catch (error) {
       this.handleError(error, res);
     }
@@ -162,7 +208,7 @@ export class AuthController {
   /**
    * Verify email
    */
-  public verifyEmail = async (req: Request, res: Response): Promise<void> => {
+  public verifyEmail = async (req: Request<{ token: string }>, res: Response): Promise<void> => {
     try {
       const { token } = req.params;
       if (!token) {
@@ -170,10 +216,11 @@ export class AuthController {
       }
 
       await this.authService.verifyEmail(token);
-      res.status(200).json({
+      const response: SuccessResponse<void> = {
         status: 'success',
         message: 'Email verified successfully'
-      });
+      };
+      res.status(200).json(response);
     } catch (error) {
       this.handleError(error, res);
     }
@@ -182,18 +229,20 @@ export class AuthController {
   /**
    * Refresh access token
    */
-  public refreshToken = async (req: Request, res: Response): Promise<void> => {
+  public refreshToken = async (req: Request<unknown, unknown, { refreshToken: string }>, res: Response): Promise<void> => {
     try {
       const { refreshToken } = req.body;
       if (!refreshToken) {
         throw new ValidationError('Refresh token is required');
       }
 
-      const tokens: TokenResponse = await this.authService.refreshToken(refreshToken);
-      res.status(200).json({
+      const tokens = await this.authService.refreshToken(refreshToken);
+      const response: SuccessResponse<TokenResponse> = {
         status: 'success',
+        message: 'Token refreshed successfully',
         data: tokens
-      });
+      };
+      res.status(200).json(response);
     } catch (error) {
       this.handleError(error, res);
     }
@@ -210,10 +259,12 @@ export class AuthController {
       }
 
       const sessions = await this.authService.getActiveSessions(userId);
-      res.status(200).json({
+      const response: SuccessResponse<typeof sessions> = {
         status: 'success',
+        message: 'Active sessions retrieved successfully',
         data: sessions
-      });
+      };
+      res.status(200).json(response);
     } catch (error) {
       this.handleError(error, res);
     }

@@ -6,6 +6,7 @@ import { errorHandler } from './shared/middleware/errorHandler';
 import { requestLogger } from './shared/middleware/requestLogger';
 import { addRequestId } from './shared/middleware/requestId';
 import { setupRoutes } from './api';
+import { logger } from './shared/logger';
 
 // Create Express app
 const app = express();
@@ -25,10 +26,17 @@ app.use(compression() as unknown as RequestHandler);
 app.use(addRequestId);
 app.use(requestLogger);
 
-// Setup routes
-setupRoutes(app);
+// Setup routes with async error handling
+const initializeApp = async () => {
+  try {
+    await setupRoutes(app);
+    // Error handling - must be last
+    app.use(errorHandler);
+    return app;
+  } catch (error) {
+    logger.error('Failed to initialize app:', error);
+    throw error;
+  }
+};
 
-// Error handling
-app.use(errorHandler);
-
-export default app; 
+export default initializeApp(); 

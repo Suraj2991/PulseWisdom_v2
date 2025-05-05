@@ -6,7 +6,6 @@ import { birthChartValidations } from '../validator/birthChart.validator';
 import { createAuthMiddleware } from '../../auth/middleware/auth';
 import { RedisCache } from '../../../infrastructure/cache/RedisCache';
 import { config } from '../../../shared/config';
-import { DatabaseService } from '../../../infrastructure/database/database';
 import { EphemerisClient } from '../../ephemeris/clients/EphemerisClient';
 import { AspectService, CelestialBodyService, EphemerisErrorHandler, EphemerisService, HouseService } from '../../ephemeris';
 import { ITokenVerifier } from '../../auth/ports/ITokenVerifier';
@@ -19,7 +18,6 @@ const router = Router();
 // Initialize services
 const redisUrl = config.redisUrl;
 const cache = new RedisCache(redisUrl);
-const databaseService = DatabaseService.getInstance();
 const ephemerisClient = new EphemerisClient(config.ephemerisApiUrl, config.ephemerisApiKey);
 const celestialBodyService = new CelestialBodyService(cache);
 const aspectService = new AspectService(cache);
@@ -123,7 +121,7 @@ router.post(
 );
 
 // Error handling middleware
-router.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+router.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   logger.error('Birth chart operation failed', { error: err });
   res.status(500).json({
     status: 'error',

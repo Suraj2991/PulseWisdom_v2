@@ -1,10 +1,5 @@
 import { config } from '../config';
 
-interface RateLimitConfig {
-  maxAttempts: number;
-  windowMs: number;
-}
-
 export class RateLimiter {
   private attempts: Map<string, { count: number; timestamp: number }>;
   private windowMs: number;

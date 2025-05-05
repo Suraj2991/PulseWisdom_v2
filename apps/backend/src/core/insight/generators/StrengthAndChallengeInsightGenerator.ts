@@ -1,50 +1,107 @@
 import { BaseInsightGenerator } from './BaseInsightGenerator';
 import { InsightAnalysis, AspectInsight, InsightType, InsightCategory, InsightSeverity } from '../types/insight.types';
-import { v4 as uuidv4 } from 'uuid';
+import { ChartAnalysisService } from '../../ai/services/ChartAnalysisService';
+import { logger } from '../../../shared/logger';
+import { ServiceError } from '../../../domain/errors';
 
 export class StrengthAndChallengeInsightGenerator extends BaseInsightGenerator<AspectInsight> {
-  constructor() {
+  constructor(
+    private readonly chartAnalysisService: ChartAnalysisService
+  ) {
     super(InsightType.ASPECT);
   }
 
-  generate(analysis: InsightAnalysis): AspectInsight[] {
-    const insights: AspectInsight[] = [];
-    
-    if (analysis.aspects) {
-      const majorAspects = analysis.aspects.filter(a => ['conjunction', 'opposition', 'square', 'trine', 'sextile'].includes(a.type));
+  async generate(analysis: InsightAnalysis): Promise<AspectInsight[]> {
+    try {
+      const insights: AspectInsight[] = [];
       
-      for (const aspect of majorAspects) {
-        const severity = ['opposition', 'square'].includes(aspect.type) ? InsightSeverity.HIGH : InsightSeverity.MEDIUM;
-        const category = ['trine', 'sextile'].includes(aspect.type) ? InsightCategory.STRENGTHS : InsightCategory.CHALLENGES;
-        
+      if (!analysis.birthChart || !analysis.aspects) {
+        logger.warn('Missing required data for strength and challenge insight generation', {
+          hasBirthChart: !!analysis.birthChart,
+          hasAspects: !!analysis.aspects
+        });
+        return insights;
+      }
+
+      // Get strengths and challenges from AI service
+      const [strengths, challenges] = await Promise.all([
+        this.chartAnalysisService.analyzeStrengths(analysis.birthChart),
+        this.chartAnalysisService.analyzeChallenges(analysis.birthChart)
+      ]);
+
+      // Convert strengths to insights
+      for (const strength of strengths) {
         const baseInsight = this.createBaseInsight(
-          `This ${aspect.type} aspect indicates ${category === InsightCategory.STRENGTHS ? 'a natural talent' : 'a potential challenge'} in integrating these planetary energies.`,
-          category,
-          severity
+          strength.description,
+          InsightCategory.STRENGTHS,
+          InsightSeverity.MEDIUM
         );
+
+        // Parse aspect strings into aspect objects
+        const aspects = strength.supportingAspects.map(aspectStr => {
+          const [body1, type, body2] = aspectStr.split(' ');
+          return {
+            body1,
+            body2,
+            type,
+            orb: 0, // Default orb since it's not in the string format
+            isApplying: false // Default since it's not in the string format
+          };
+        });
 
         insights.push({
           ...baseInsight,
           type: this.type,
-          aspectType: aspect.type,
-          planet1Id: aspect.body1Id,
-          planet2Id: aspect.body2Id,
-          aspects: [{
-            body1: aspect.body1Id.toString(),
-            body2: aspect.body2Id.toString(),
-            type: aspect.type,
-            orb: aspect.orb,
-            isApplying: aspect.isApplying
-          }],
+          aspectType: 'strength',
+          planet1Id: 0, // Default to Sun
+          planet2Id: 0, // Default to Sun
+          aspects,
           houses: [],
-          supportingFactors: [],
+          supportingFactors: [strength.area],
           challenges: [],
           recommendations: []
         });
       }
-    }
 
-    this.logGeneration(analysis, insights.length);
-    return insights;
+      // Convert challenges to insights
+      for (const challenge of challenges) {
+        const baseInsight = this.createBaseInsight(
+          challenge.description,
+          InsightCategory.CHALLENGES,
+          InsightSeverity.HIGH
+        );
+
+        // Parse aspect strings into aspect objects
+        const aspects = challenge.supportingAspects.map(aspectStr => {
+          const [body1, type, body2] = aspectStr.split(' ');
+          return {
+            body1,
+            body2,
+            type,
+            orb: 0, // Default orb since it's not in the string format
+            isApplying: false // Default since it's not in the string format
+          };
+        });
+
+        insights.push({
+          ...baseInsight,
+          type: this.type,
+          aspectType: 'challenge',
+          planet1Id: 0, // Default to Sun
+          planet2Id: 0, // Default to Sun
+          aspects,
+          houses: [],
+          supportingFactors: [],
+          challenges: [challenge.area],
+          recommendations: []
+        });
+      }
+
+      this.logGeneration(analysis, insights.length);
+      return insights;
+    } catch (error) {
+      logger.error('Failed to generate strength and challenge insights', { error });
+      throw new ServiceError(`Failed to generate strength and challenge insights: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 } 

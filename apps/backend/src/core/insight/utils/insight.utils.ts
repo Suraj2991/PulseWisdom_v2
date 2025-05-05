@@ -2,6 +2,7 @@ import { ObjectId } from 'mongodb';
 import { ZodiacSign, ZODIAC_SIGNS } from '../../../shared/constants/astrology';
 import { Transit } from '../../transit';
 import { InsightLog, InsightType, InsightMetadata } from '..';
+import { LifeArea } from '../../life-theme';
 
 /**
  * Gets the zodiac sign from a given longitude
@@ -59,17 +60,17 @@ export function createInsightLog(
 }
 
 /**
- * Determines the focus area for a transit
+ * Determines the life area for a transit
  * @param transit - The transit to analyze
- * @returns The focus area as a string
+ * @returns The life area
  */
-export function determineTransitFocusArea(transit: Transit): string {
-  // Simple focus area determination based on transit type
-  if (transit.type === 'conjunction') return 'Identity';
-  if (transit.type === 'opposition') return 'Relationships';
-  if (transit.type === 'trine') return 'Growth';
-  if (transit.type === 'square') return 'Challenges';
-  return 'General';
+export function determineTransitLifeArea(transit: Transit): LifeArea {
+  // Map transit types to life areas
+  if (transit.type === 'conjunction') return LifeArea.PERSONAL_GROWTH;
+  if (transit.type === 'opposition') return LifeArea.RELATIONSHIPS;
+  if (transit.type === 'trine') return LifeArea.SPIRITUALITY;
+  if (transit.type === 'square') return LifeArea.CAREER;
+  return LifeArea.PERSONAL_GROWTH;
 }
 
 /**

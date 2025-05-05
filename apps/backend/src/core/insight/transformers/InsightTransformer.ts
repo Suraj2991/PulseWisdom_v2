@@ -5,19 +5,6 @@ import { IInsight
   , InsightType } from '../../insight';
 import { Types } from 'mongoose';
 
-interface InsightAspect {
-  bodyId: number;
-  type: string;
-  orb: number;
-}
-
-interface InsightDetail {
-  bodyId?: number;
-  type: string;
-  aspects?: InsightAspect[];
-  description: string;
-}
-
 export class InsightTransformer {
   static toDTO(insight: IInsight & { _id: Types.ObjectId }): InsightDTO {
     return {

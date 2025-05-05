@@ -3,6 +3,11 @@ import { logger } from '../../../shared/logger';
 import { ICache } from '../../../infrastructure/cache/ICache';
 import { IEphemerisClient } from '../../ephemeris';
 
+interface ErrorContext {
+  operation: string;
+  [key: string]: unknown;
+}
+
 export class EphemerisErrorHandler {
   constructor(
     private readonly cache: ICache,
@@ -12,7 +17,7 @@ export class EphemerisErrorHandler {
   /**
    * Logs an astrology-related error with context
    */
-  logAstrologyError(error: Error, context: Record<string, any>): void {
+  logAstrologyError(error: Error, context: ErrorContext): void {
     logger.error('Astrology calculation error', {
       error: error.message,
       stack: error.stack,
@@ -24,7 +29,7 @@ export class EphemerisErrorHandler {
    * Handles errors during ephemeris calculations
    * @throws CalculationError
    */
-  handleCalculationError(error: Error, context: Record<string, any>): never {
+  handleCalculationError(error: Error, context: ErrorContext): never {
     this.logAstrologyError(error, context);
     throw new CalculationError(
       'Failed to perform astrological calculation: ' + error.message
@@ -35,7 +40,7 @@ export class EphemerisErrorHandler {
    * Handles validation errors for ephemeris inputs
    * @throws ValidationError
    */
-  handleValidationError(error: Error, context: Record<string, any>): never {
+  handleValidationError(error: Error, context: ErrorContext): never {
     this.logAstrologyError(error, context);
     throw new ValidationError(
       'Invalid input for astrological calculation: ' + error.message
@@ -46,7 +51,7 @@ export class EphemerisErrorHandler {
    * Handles errors from the ephemeris client
    * @throws AppError
    */
-  handleClientError(error: Error, context: Record<string, any>): never {
+  handleClientError(error: Error, context: ErrorContext): never {
     this.logAstrologyError(error, context);
     throw new AppError(
       'Ephemeris client error: ' + error.message
@@ -58,7 +63,7 @@ export class EphemerisErrorHandler {
    */
   async withErrorHandling<T>(
     operation: () => Promise<T>,
-    context: Record<string, any>
+    context: ErrorContext
   ): Promise<T> {
     try {
       return await operation();

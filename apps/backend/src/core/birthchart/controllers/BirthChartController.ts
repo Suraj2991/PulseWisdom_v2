@@ -7,7 +7,11 @@ import { HOUSE_SYSTEMS } from '../../../shared/constants/astrology';
 import { logger } from '../../../shared/logger';
 
 export class BirthChartController {
-  constructor(private birthChartService: BirthChartService) {}
+  private readonly service: BirthChartService;
+
+  constructor(birthChartService: BirthChartService) {
+    this.service = birthChartService;
+  }
 
   private handleError(error: Error | ValidationError | NotFoundError, next: NextFunction): void {
     logger.error('Birth chart operation failed', { error });
@@ -32,7 +36,7 @@ export class BirthChartController {
       this.validateDateTime(datetime);
       this.validateLocation(location);
 
-      const birthChart = await this.birthChartService.createBirthChart(userId, datetime, location);
+      const birthChart = await this.service.createBirthChart(userId, datetime, location);
       res.status(201).json(birthChart);
     } catch (error) {
       this.handleError(error instanceof Error ? error : new Error('An unexpected error occurred'), next);
@@ -49,7 +53,7 @@ export class BirthChartController {
         throw new ValidationError('Birth chart ID is required');
       }
 
-      const birthChart = await this.birthChartService.getBirthChartById(birthChartId);
+      const birthChart = await this.service.getBirthChartById(birthChartId);
       if (!birthChart) {
         throw new NotFoundError('Birth chart not found');
       }
@@ -83,7 +87,7 @@ export class BirthChartController {
         throw new ValidationError(`Invalid house system. Must be one of: ${Object.values(HOUSE_SYSTEMS).join(', ')}`);
       }
 
-      const updatedBirthChart = await this.birthChartService.updateBirthChart(birthChartId, updateData);
+      const updatedBirthChart = await this.service.updateBirthChart(birthChartId, updateData);
       res.json(updatedBirthChart);
     } catch (error) {
       this.handleError(error instanceof Error ? error : new Error('An unexpected error occurred'), next);
@@ -100,7 +104,7 @@ export class BirthChartController {
         throw new ValidationError('Birth chart ID is required');
       }
 
-      const result = await this.birthChartService.deleteBirthChart(birthChartId);
+      const result = await this.service.deleteBirthChart(birthChartId);
       if (!result) {
         throw new NotFoundError('Birth chart not found');
       }
@@ -120,7 +124,7 @@ export class BirthChartController {
         throw new ValidationError('User not authenticated');
       }
 
-      const birthCharts = await this.birthChartService.getBirthChartsByUserId(userId);
+      const birthCharts = await this.service.getBirthChartsByUserId(userId);
       res.json(birthCharts);
     } catch (error) {
       this.handleError(error instanceof Error ? error : new Error('An unexpected error occurred'), next);
@@ -141,7 +145,7 @@ export class BirthChartController {
         throw new ValidationError(`Invalid house system. Must be one of: ${Object.values(HOUSE_SYSTEMS).join(', ')}`);
       }
 
-      const birthChart = await this.birthChartService.calculateBirthChart(datetime, location);
+      const birthChart = await this.service.calculateBirthChart(datetime, location);
       res.json(birthChart);
     } catch (error) {
       this.handleError(error instanceof Error ? error : new Error('An unexpected error occurred'), next);

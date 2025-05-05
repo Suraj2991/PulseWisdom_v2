@@ -1,5 +1,5 @@
 import { CelestialBody } from '../../ephemeris';
-import { WindowType } from '../../transit';
+import { WindowType } from '../services/TransitClassifier';
 import { AspectType } from '../../../shared/constants/astrology';
 
 export interface Transit {
@@ -30,7 +30,7 @@ export interface TransitFilter {
 }
 
 export interface TransitWindow {
-  type: 'Opportunity' | 'Challenge' | 'Integration';
+  type: WindowType;
   title: string;
   startDate: Date;
   endDate: Date;

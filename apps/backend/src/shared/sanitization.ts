@@ -1,5 +1,8 @@
 import { ValidationError } from '../domain/errors';
 
+type SanitizedValue = string | number | boolean | null | SanitizedObject | SanitizedValue[];
+type SanitizedObject = { [key: string]: SanitizedValue };
+
 export class Sanitizer {
   static sanitizeString(input: string): string {
     if (!input) return '';
@@ -46,10 +49,10 @@ export class Sanitizer {
       .slice(0, 10); // Limit to 10 tags
   }
 
-  static sanitizePreferences(preferences: Record<string, any>): Record<string, any> {
+  static sanitizePreferences(preferences: SanitizedObject): SanitizedObject {
     if (!preferences) return {};
     
-    const sanitized: Record<string, any> = {};
+    const sanitized: SanitizedObject = {};
     for (const [key, value] of Object.entries(preferences)) {
       if (typeof value === 'string') {
         sanitized[key] = this.sanitizeString(value);
@@ -58,7 +61,7 @@ export class Sanitizer {
           typeof item === 'string' ? this.sanitizeString(item) : item
         );
       } else if (typeof value === 'object' && value !== null) {
-        sanitized[key] = this.sanitizePreferences(value);
+        sanitized[key] = this.sanitizePreferences(value as SanitizedObject);
       } else {
         sanitized[key] = value;
       }
@@ -74,10 +77,10 @@ export class Sanitizer {
       .replace(/\s+/g, ' '); // Normalize whitespace
   }
 
-  static sanitizeMetadata(metadata: Record<string, any>): Record<string, any> {
+  static sanitizeMetadata(metadata: SanitizedObject): SanitizedObject {
     if (!metadata) return {};
     
-    const sanitized: Record<string, any> = {};
+    const sanitized: SanitizedObject = {};
     for (const [key, value] of Object.entries(metadata)) {
       if (typeof value === 'string') {
         sanitized[key] = this.sanitizeString(value);
@@ -86,7 +89,7 @@ export class Sanitizer {
           typeof item === 'string' ? this.sanitizeString(item) : item
         );
       } else if (typeof value === 'object' && value !== null) {
-        sanitized[key] = this.sanitizeMetadata(value);
+        sanitized[key] = this.sanitizeMetadata(value as SanitizedObject);
       } else {
         sanitized[key] = value;
       }

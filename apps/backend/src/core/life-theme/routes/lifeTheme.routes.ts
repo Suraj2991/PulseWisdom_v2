@@ -12,7 +12,7 @@ import { createAuthMiddleware, ITokenVerifier } from '../../auth';
 import { validateRequest } from '../../../shared/middleware/validateRequest';
 import { z } from 'zod';
 import { Sanitizer } from '../../../shared/sanitization';
-import { PromptBuilder, LLMClient } from '../../ai';
+import { LLMClient } from '../../ai';
 import { BirthChartService } from '../../birthchart';
 import { EphemerisClient } from '../../ephemeris';
 import { config } from '../../../shared/config';
@@ -82,15 +82,11 @@ export const createLifeThemeRoutes = (cache: ICache) => {
   const lifeThemeService = new LifeThemeService(cache, birthChartService, aiService, celestialBodyService, aspectService);
   const lifeThemeController = new LifeThemeController(lifeThemeService);
 
-  router.get('/:birthChartId', lifeThemeController.analyzeLifeThemes);
-  router.get('/:birthChartId/:themeId', lifeThemeController.getLifeThemesByUserId);
-
-  // Health check endpoint
-  router.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', service: 'life-themes' });
+  // Validation schemas
+  const birthChartIdSchema = z.object({
+    birthChartId: z.string().min(1, 'Birth chart ID is required')
   });
 
-  // Validation schemas
   const updateLifeThemesSchema = z.object({
     coreIdentity: z.object({
       ascendant: z.string(),
@@ -148,10 +144,20 @@ export const createLifeThemeRoutes = (cache: ICache) => {
     }
   };
 
+  // Remove the duplicate routes and consolidate with proper validation
+  router.get('/:birthChartId', validateRequest(birthChartIdSchema), lifeThemeController.analyzeLifeThemes);
+  router.get('/:birthChartId/:themeId', validateRequest(birthChartIdSchema), lifeThemeController.getLifeThemesByUserId);
+
+  // Health check endpoint
+  router.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', service: 'life-themes' });
+  });
+
   // Analyze life themes for a birth chart
   router.get(
     '/birth-charts/:birthChartId/life-themes',
     createAuthMiddleware(tokenVerifier),
+    validateRequest(birthChartIdSchema),
     lifeThemeController.analyzeLifeThemes
   );
 
@@ -159,12 +165,12 @@ export const createLifeThemeRoutes = (cache: ICache) => {
   router.get(
     '/users/:userId/life-themes',
     createAuthMiddleware(tokenVerifier),
-    (req, res, next) => validateRequest(userIdSchema)(req, res, next),
+    validateRequest(userIdSchema),
     lifeThemeController.getLifeThemesByUserId
   );
 
   // Normalize and sanitize life theme input
-  const normalizeLifeThemeInput = (req: Request<{}, {}, LifeThemeRequestBody>, res: Response, next: NextFunction) => {
+  const normalizeLifeThemeInput = (req: Request<Record<string, never>, unknown, LifeThemeRequestBody>, res: Response, next: NextFunction) => {
     if (req.body.coreIdentity) {
       req.body.coreIdentity.description = Sanitizer.sanitizeString(req.body.coreIdentity.description);
     }

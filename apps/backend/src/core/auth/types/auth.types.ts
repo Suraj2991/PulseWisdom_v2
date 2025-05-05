@@ -5,6 +5,7 @@ export type UserRole = typeof USER_ROLES[keyof typeof USER_ROLES];
 
 export interface AuthUser {
   id: string;
+  email: string;
   role: UserRole;
 }
 
@@ -15,6 +16,7 @@ export interface AuthRequest extends Request {
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
+  emailVerificationToken?: string;
   user: {
     id: string;
     email: string;
@@ -99,7 +101,7 @@ export interface RegisterData {
 }
 
 export interface ChangePasswordData {
-  userId: string;
+  email: string;
   currentPassword: string;
   newPassword: string;
 }

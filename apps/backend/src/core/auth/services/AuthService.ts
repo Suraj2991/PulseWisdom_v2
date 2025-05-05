@@ -10,7 +10,6 @@ import { config } from '../../../shared/config';
 import { TokenPayload, AuthTokens, LoginCredentials, RegisterData, ChangePasswordData, AuthResponse, UserRole } from '../types/auth.types';
 import { RateLimiter } from '../../../shared/utils/rateLimiter';
 import crypto from 'crypto';
-import { validatePasswordReset } from '../validators/auth.validator';
 import { Session } from '../types/auth.types';
 import { validateUserRegistration } from '../../user/validators/user.validator';
 import { USER_ROLES } from '../../../shared/constants/user';
@@ -24,6 +23,10 @@ interface ExtendedTokenPayload extends TokenPayload {
 }
 
 export class AuthService {
+  private readonly SALT_ROUNDS = 12;
+  private readonly MAX_LOGIN_ATTEMPTS = 5;
+  private readonly LOGIN_LOCKOUT_TIME = 3600; // 1 hour in seconds
+
   constructor(
     private readonly cache: ICache,
     private readonly userRepository: UserRepository,
@@ -43,15 +46,21 @@ export class AuthService {
   }
 
   private handleError(message: string, error: unknown): Error {
-    logger.error(message, { 
-      error,
-      service: 'AuthService',
-      timestamp: new Date().toISOString()
-    });
-    if (error instanceof AppError) {
-      return error;
+    logger.error(message, { error });
+    if (error instanceof Error) {
+      return new AppError(`${message}: ${error.message}`);
     }
-    return new AppError(message + ': ' + (error instanceof Error ? error.message : 'Unknown error'));
+    return new AppError(`${message}: Unknown error`);
+  }
+
+  private async hashPassword(password: string): Promise<string> {
+    try {
+      const salt = await bcrypt.genSalt(this.SALT_ROUNDS);
+      return bcrypt.hash(password, salt);
+    } catch (error) {
+      logger.error('Password hashing failed', { error });
+      throw new AuthError('Failed to secure password');
+    }
   }
 
   async register(userData: RegisterData): Promise<AuthResponse> {
@@ -65,7 +74,7 @@ export class AuthService {
       }
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(userData.password, 10);
+      const hashedPassword = await this.hashPassword(userData.password);
       
       // Create user using repository
       const user = await this.userRepository.createUser({
@@ -129,7 +138,13 @@ export class AuthService {
       logger.info('User registered successfully', { userId: user._id });
       
       // Generate tokens
-      const { accessToken, refreshToken } = await this.generateTokens(user);
+      const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.role as UserRole);
+      
+      // Generate email verification token
+      const emailVerificationToken = this.generateEmailVerificationToken(user._id.toString());
+      
+      await this.cache.del(`refresh-token:${user._id.toString()}`);
+      
       return {
         user: {
           id: user._id.toString(),
@@ -139,61 +154,55 @@ export class AuthService {
           role: user.role as 'user' | 'admin'
         },
         accessToken,
-        refreshToken
+        refreshToken,
+        emailVerificationToken
       };
     } catch (error) {
       throw this.handleError('Failed to register user', error);
     }
   }
 
-  private async validatePassword(password: string): Promise<ValidationError | void> {
-    const errors: string[] = [];
-    
-    if (password.length < 8) {
-      errors.push('Password must be at least 8 characters long');
-    }
-    if (!/[A-Z]/.test(password)) {
-      errors.push('Password must contain at least one uppercase letter');
-    }
-    if (!/[a-z]/.test(password)) {
-      errors.push('Password must contain at least one lowercase letter');
-    }
-    if (!/\d/.test(password)) {
-      errors.push('Password must contain at least one number');
-    }
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-      errors.push('Password must contain at least one special character');
+  private validatePassword(password: string, message = 'Password validation failed'): boolean {
+    const minLength = 8;
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumbers = /\d/.test(password);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+    const isValid = password.length >= minLength &&
+      hasUpperCase &&
+      hasLowerCase &&
+      hasNumbers &&
+      hasSpecialChar;
+
+    if (!isValid) {
+      logger.debug('Password validation failed', { message });
     }
 
-    if (errors.length > 0) {
-      throw new ValidationError('Invalid password', errors);
-    }
+    return isValid;
   }
 
-  private async generateTokens(user: UserWithId): Promise<AuthTokens> {
-    if (!config.jwtSecret || !config.jwtRefreshSecret) {
-      throw new AuthError('JWT secrets not configured');
+  private generateTokens(userId: string, role: UserRole): AuthTokens {
+    if (!role) {
+      role = USER_ROLES.USER;
     }
 
-  
     const accessTokenOptions: SignOptions = {
-      expiresIn: '1h',
-      algorithm: 'HS256'
+      expiresIn: Number(config.jwtExpiresIn)
     };
 
     const refreshTokenOptions: SignOptions = {
-      expiresIn: '7d',
-      algorithm: 'HS256'
+      expiresIn: Number(config.jwtRefreshExpiresIn)
     };
 
     const accessToken = jwt.sign(
-      { userId: user._id.toString(), role: user.role },
+      { userId, role, type: 'access' },
       config.jwtSecret,
       accessTokenOptions
     );
 
     const refreshToken = jwt.sign(
-      { userId: user._id.toString(), role: user.role },
+      { userId, role, type: 'refresh' },
       config.jwtRefreshSecret,
       refreshTokenOptions
     );
@@ -201,37 +210,63 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  private async generateEmailVerificationToken(user: IUser): Promise<string> {
-    const token = crypto.randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+  private generateEmailVerificationToken(userId: string): string {
+    const options: SignOptions = {
+      expiresIn: '24h' as const
+    };
 
-    user.emailVerificationToken = token;
-    user.emailVerificationExpires = expires;
-    await this.userRepository.updateUser(user._id!.toString(), user);
+    return jwt.sign(
+      { userId, type: 'emailVerification' },
+      config.emailVerificationSecret,
+      options
+    );
+  }
 
-    return token;
+  private async checkLoginAttempts(email: string): Promise<void> {
+    const attempts = await this.cache.get<number>(`login-attempts:${email}`);
+    if (attempts && attempts >= this.MAX_LOGIN_ATTEMPTS) {
+      throw new AuthError('Too many failed attempts. Please try again later.');
+    }
+  }
+
+  private async incrementLoginAttempts(email: string): Promise<void> {
+    const attempts = await this.cache.get<number>(`login-attempts:${email}`) || 0;
+    await this.cache.set(`login-attempts:${email}`, attempts + 1, this.LOGIN_LOCKOUT_TIME);
+  }
+
+  private async resetLoginAttempts(email: string): Promise<void> {
+    await this.cache.del(`login-attempts:${email}`);
   }
 
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
+      // Check for too many failed attempts
+      await this.checkLoginAttempts(credentials.email);
+
       const user = await this.userRepository.findByEmail(credentials.email);
-      if (!user) {
+      if (!user || !user._id) {
         logger.error('Login failed: User not found', { email: credentials.email });
         throw new AuthError('Invalid credentials');
       }
 
       const isValidPassword = await bcrypt.compare(credentials.password, user.password);
       if (!isValidPassword) {
+        await this.incrementLoginAttempts(credentials.email);
         logger.error('Login failed: Invalid password', { email: credentials.email });
         throw new AuthError('Invalid credentials');
       }
 
-      const { accessToken, refreshToken } = await this.generateTokens(user as UserWithId);
+      // Reset login attempts on successful login
+      await this.resetLoginAttempts(credentials.email);
+
+      const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.role || USER_ROLES.USER);
       logger.info('User logged in successfully', { userId: user._id });
+
+      await this.cache.del(`refresh-token:${user._id.toString()}`);
 
       return {
         user: {
-          id: user._id?.toString() || '',
+          id: user._id.toString(),
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
@@ -289,11 +324,11 @@ export class AuthService {
       const decoded = jwt.verify(refreshToken, config.jwtRefreshSecret) as TokenPayload;
       const user = await this.userRepository.findById(decoded.userId);
       
-      if (!user) {
+      if (!user || !user._id) {
         throw new AuthError('User not found');
       }
 
-      return this.generateTokens(user as UserWithId);
+      return this.generateTokens(user._id.toString(), user.role || USER_ROLES.USER);
     } catch (error) {
       throw this.handleError('Failed to refresh token', error);
     }
@@ -313,11 +348,19 @@ export class AuthService {
     }
   }
 
-  async resetPassword(email: string, newPassword: string): Promise<void> {
-    // Validate input
-    validatePasswordReset({ email, newPassword });
+  public async resetPassword(token: string, newPassword: string): Promise<void> {
+    if (!this.validatePassword(newPassword)) {
+      throw new ValidationError('Invalid password format', ['Password does not meet security requirements']);
+    }
 
-    // ... rest of existing resetPassword code ...
+    const resetData = await this.cache.get(`reset:${token}`);
+    if (!resetData) {
+      throw new AuthError('Invalid or expired reset token');
+    }
+
+    const { userId } = JSON.parse(resetData as string) as { userId: string };
+    await this.userRepository.updateUser(userId, { password: newPassword });
+    await this.cache.delete(`reset:${token}`);
   }
 
   async updateRefreshToken(userId: string, refreshToken: string | null): Promise<void> {
@@ -342,7 +385,7 @@ export class AuthService {
 
   async changePassword(data: ChangePasswordData): Promise<void> {
     try {
-      const user = await this.userRepository.findById(data.userId);
+      const user = await this.userRepository.findByEmail(data.email);
       if (!user) {
         throw new NotFoundError('User not found');
       }
@@ -352,11 +395,20 @@ export class AuthService {
         throw new AuthError('Current password is incorrect');
       }
 
-      await this.validatePassword(data.newPassword);
-      const hashedPassword = await bcrypt.hash(data.newPassword, 10);
-      await this.userRepository.updateUser(data.userId, { password: hashedPassword });
+      const hashedPassword = await this.hashPassword(data.newPassword);
       
-      logger.info('Password changed successfully', { userId: data.userId });
+      if (!user._id) {
+        throw new AuthError('User ID is required for password change');
+      }
+
+      await this.userRepository.updateUser(user._id.toString(), {
+        password: hashedPassword
+      });
+
+      // Invalidate all existing sessions
+      await this.cache.del(`refresh-token:${user._id.toString()}`);
+      
+      logger.info('Password changed successfully', { userId: user._id });
     } catch (error) {
       throw this.handleError('Failed to change password', error);
     }
@@ -365,14 +417,14 @@ export class AuthService {
   async generatePasswordResetToken(email: string): Promise<string> {
     try {
       const user = await this.userRepository.findByEmail(email);
-      if (!user) {
+      if (!user || !user._id) {
         throw new NotFoundError('User not found');
       }
 
       const token = crypto.randomBytes(32).toString('hex');
       const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-      await this.userRepository.updateUser(user._id!.toString(), {
+      await this.userRepository.updateUser(user._id.toString(), {
         passwordResetToken: token,
         passwordResetExpires: expires
       });
@@ -384,25 +436,21 @@ export class AuthService {
   }
 
   async verifyEmail(token: string): Promise<void> {
+    if (!config.emailVerificationSecret) {
+      throw new AuthError('Email verification secret not configured');
+    }
     try {
-      const user = await this.userRepository.findByEmailVerificationToken(token);
-      if (!user) {
-        throw new NotFoundError('Invalid verification token');
+      const decoded = jwt.verify(token, config.emailVerificationSecret) as TokenPayload;
+      if (!decoded.userId) {
+        throw new AuthError('Invalid verification token');
       }
-
-      if (user.emailVerificationExpires && user.emailVerificationExpires < new Date()) {
-        throw new AuthError('Verification token has expired');
+      const user = await this.userRepository.findById(decoded.userId);
+      if (!user || !user._id) {
+        throw new NotFoundError('User not found');
       }
-
-      await this.userRepository.updateUser(user._id!.toString(), {
-        isEmailVerified: true,
-        emailVerificationToken: undefined,
-        emailVerificationExpires: undefined
-      });
-
-      logger.info('Email verified successfully', { userId: user._id });
+      await this.userRepository.updateUser(user._id.toString(), { isEmailVerified: true });
     } catch (error) {
-      throw this.handleError('Failed to verify email', error);
+      throw new AuthError('Invalid or expired verification token');
     }
   }
 
@@ -413,5 +461,9 @@ export class AuthService {
     } catch (error) {
       throw this.handleError('Failed to get active sessions', error);
     }
+  }
+
+  private getTokenKey(userId: string): string {
+    return `user:${userId}:tokens`;
   }
 }

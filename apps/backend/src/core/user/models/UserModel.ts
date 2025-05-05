@@ -1,5 +1,5 @@
 import { ObjectId } from 'mongodb';
-import { USER_ROLES, USER_STATUS, USER_ACTIVITY } from '../../../shared/constants/user';
+import { USER_ROLES, USER_STATUS } from '../../../shared/constants/user';
 
 export interface IUser {
   _id?: ObjectId;

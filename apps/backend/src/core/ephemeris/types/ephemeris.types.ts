@@ -20,12 +20,12 @@ export type HouseSystem = 'Placidus' | 'Koch' | 'Porphyrius' | 'Regiomontanus' |
 export interface CelestialBody {
   id: number;
   name: string;
+  sign: string;
+  house: number;
   longitude: number;
   latitude: number;
   speed: number;
-  house: number;
-  sign: string;
-  signLongitude: number;
+  retrograde: boolean;
 }
 
 export interface Houses {
@@ -110,4 +110,12 @@ export interface Pattern {
   description: string;
   planets: string[];
   houses: number[];
+}
+
+export interface CelestialPosition {
+  id?: number;
+  longitude: number;
+  latitude: number;
+  speed: number;
+  house?: number;
 }

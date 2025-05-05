@@ -38,9 +38,6 @@ export enum LifeArea {
   CREATIVITY = 'creativity'
 }
 
-// For backward compatibility
-export type FocusArea = LifeArea; 
-
 export enum ThemeCategory {
   GROWTH = 'GROWTH',
   KARMIC = 'KARMIC',
@@ -95,8 +92,4 @@ export interface Pattern {
   description: string;
   planets: string[];
   houses: number[];
-}
-
-export interface CelestialBody {
-  longitude: number;
 } 

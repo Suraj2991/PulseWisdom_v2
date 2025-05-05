@@ -8,7 +8,6 @@ import { LifeTheme
   , ThemeMetadata
   , LifeThemeAnalysis
  } from '../../life-theme';
-import { InsightCategory } from '../../insight/types/insight.types';
 import { NotFoundError, AppError } from '../../../domain/errors';
 import { AIService } from '../../ai';
 import { BirthChartService, BirthChartDocument } from '../../birthchart';
@@ -81,7 +80,12 @@ export class LifeThemeService {
     try {
       this.logInfo('Analyzing life themes', { birthChartId: input.birthChartId });
       const birthChart = await this.getBirthChart(input.birthChartId);
-      return await this.generateLifeThemes(birthChart);
+      const themes = await this.generateLifeThemes(birthChart);
+      
+      // Generate insights for the themes
+      await this.generateLifeThemeInsights(birthChart, input.birthChartId);
+      
+      return themes;
     } catch (error) {
       this.handleError('Failed to analyze life themes', error, { birthChartId: input.birthChartId });
     }
@@ -654,7 +658,7 @@ export class LifeThemeService {
   async updateLifeThemes(birthChartId: string, updates: Partial<LifeThemeAnalysis>): Promise<LifeThemeAnalysis> {
     try {
       const [themes, birthChart] = await this.getThemesAndBirthChart(birthChartId);
-      const updatedAnalysis = await this.createUpdatedAnalysis(birthChart, themes, updates);
+      const updatedAnalysis = this.createUpdatedAnalysis(birthChart, themes, updates);
       await this.cacheAnalysis(birthChartId, updatedAnalysis);
       return updatedAnalysis;
     } catch (error) {
@@ -673,11 +677,11 @@ export class LifeThemeService {
     return [themes, birthChart];
   }
 
-  private async createUpdatedAnalysis(
+  private createUpdatedAnalysis(
     birthChart: BirthChartDocument,
     themes: LifeTheme[],
     updates: Partial<LifeThemeAnalysis>
-  ): Promise<LifeThemeAnalysis> {
+  ): LifeThemeAnalysis {
     return {
       birthChartId: birthChart._id.toString(),
       userId: birthChart.userId,

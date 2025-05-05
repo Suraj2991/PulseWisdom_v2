@@ -1,22 +1,22 @@
 import { ICache } from '../../../infrastructure/cache/ICache';
-import { IEphemerisClient
-  , AspectResponse
-  , HouseResponse 
-  , DateTime
-  , DateTime as DomainDateTime
-  , GeoPosition
-  , BirthChart
-  , CelestialBody
-  , CelestialBodyService
-  , AspectService
-  , HouseService
-  , EphemerisErrorHandler} from '../../ephemeris';
+import { 
+  AspectResponse,
+  HouseResponse,
+  DateTime,
+  DateTime as DomainDateTime,
+  GeoPosition,
+  BirthChart,
+  CelestialBody,
+  CelestialBodyService,
+  AspectService,
+  HouseService,
+  EphemerisErrorHandler
+} from '../../ephemeris';
 import { logger } from '../../../shared/logger';
 import { AppError } from '../../../domain/errors';
 import { CacheUtils } from '../../../infrastructure/cache/CacheUtils';
 import { BaseEphemerisService } from './BaseEphemerisService';
 import { EphemerisClient } from '../clients/EphemerisClient';
-
 
 export class EphemerisService extends BaseEphemerisService {
   constructor(
@@ -28,16 +28,6 @@ export class EphemerisService extends BaseEphemerisService {
     protected readonly errorHandler: EphemerisErrorHandler
   ) {
     super(ephemerisClient, cache, celestialBodyService, aspectService, houseService, errorHandler);
-  }
-
-  async getBirthChartById(birthChartId: string): Promise<BirthChart | null> {
-    // Implementation will be added later
-    return null;
-  }
-
-  async getBirthChartsByUserId(userId: string): Promise<BirthChart[]> {
-    // Implementation will be added later
-    return [];
   }
 
   async calculateBirthChart(datetime: DomainDateTime, location: GeoPosition): Promise<BirthChart> {

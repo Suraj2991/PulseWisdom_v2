@@ -1,56 +1,66 @@
 import { IBirthChart } from '../types/birthChart.types';
-import { Planet, Aspect, Houses, CelestialBody, HouseSystem } from '../../ephemeris/types/ephemeris.types';
+import { BirthChart, CelestialBody, Aspect, Houses, HouseSystem, Angles } from '../../ephemeris/types/ephemeris.types';
 
 const VALID_HOUSE_SYSTEMS = ['Placidus', 'Koch', 'Porphyrius', 'Regiomontanus', 'Campanus', 'Equal', 'Whole Sign'] as const;
 
-export const adaptBirthChartData = (data: IBirthChart) => {
+export function adaptCelestialBody(body: Partial<CelestialBody>): CelestialBody {
   return {
-    ...data,
-    bodies: data.bodies.map(adaptCelestialBody),
-    aspects: data.aspects.map(adaptAspectData),
-    houses: adaptHouseData(data.houses),
-    angles: {
-      ascendant: data.angles.ascendant,
-      midheaven: data.angles.mc,
-      descendant: data.angles.descendant,
-      imumCoeli: data.angles.ic
-    },
-    sun: data.sun,
-    moon: data.moon,
-    ascendant: data.angles.ascendant,
-    planets: data.planets,
-    housePlacements: data.housePlacements,
-    chiron: data.chiron,
-    northNode: data.northNode,
-    southNode: data.southNode
+    id: body.id || 0,
+    name: body.name || '',
+    longitude: body.longitude || 0,
+    latitude: body.latitude || 0,
+    speed: body.speed || 0,
+    house: body.house || 0,
+    sign: body.sign || '',
+    retrograde: body.speed ? body.speed < 0 : false
   };
-};
+}
 
-const adaptCelestialBody = (body: CelestialBody) => ({
-  id: body.id,
-  name: body.name,
-  longitude: body.longitude,
-  latitude: body.latitude,
-  speed: body.speed,
-  house: body.house,
-  sign: body.sign,
-  signLongitude: body.signLongitude
-});
-
-const adaptAspectData = (aspect: { body1: string; body2: string; type: string; orb: number; isApplying?: boolean }) => ({
-  body1: aspect.body1,
-  body2: aspect.body2,
-  type: aspect.type,
-  orb: aspect.orb,
-  isApplying: aspect.isApplying ?? false
-});
-
-const adaptHouseData = (houses: { cusps: number[]; system: string }) => {
-  if (!VALID_HOUSE_SYSTEMS.includes(houses.system as any)) {
-    throw new Error(`Invalid house system: ${houses.system}`);
-  }
+export function adaptAspectData(aspect: Partial<Aspect>): Aspect {
   return {
-    cusps: houses.cusps,
-    system: houses.system as HouseSystem
+    body1: aspect.body1 || '',
+    body2: aspect.body2 || '',
+    type: aspect.type || '',
+    orb: aspect.orb || 0,
+    isApplying: aspect.isApplying || false
   };
-}; 
+}
+
+export function adaptHouseData(houses: { cusps: number[]; system: string }): Houses {
+  const validSystem = VALID_HOUSE_SYSTEMS.includes(houses.system as HouseSystem) 
+    ? houses.system as HouseSystem 
+    : 'Placidus';
+
+  return {
+    system: validSystem,
+    cusps: houses.cusps || []
+  };
+}
+
+export function adaptAngles(angles: { ascendant: number; mc: number; ic: number; descendant: number }): Angles {
+  return {
+    ascendant: angles.ascendant,
+    midheaven: angles.mc,
+    descendant: angles.descendant,
+    imumCoeli: angles.ic
+  };
+}
+
+export function adaptBirthChartData(birthChart: IBirthChart): BirthChart {
+  return {
+    datetime: birthChart.datetime,
+    location: birthChart.location,
+    bodies: birthChart.bodies.map(adaptCelestialBody),
+    houses: adaptHouseData(birthChart.houses),
+    aspects: birthChart.aspects.map(adaptAspectData),
+    angles: adaptAngles(birthChart.angles),
+    sun: birthChart.sun,
+    moon: birthChart.moon,
+    ascendant: birthChart.angles.ascendant,
+    planets: birthChart.planets,
+    housePlacements: birthChart.housePlacements,
+    chiron: birthChart.chiron,
+    northNode: birthChart.northNode,
+    southNode: birthChart.southNode
+  };
+} 

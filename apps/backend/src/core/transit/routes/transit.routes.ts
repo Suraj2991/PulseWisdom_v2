@@ -61,8 +61,12 @@ export const createTransitRoutes = (cache: ICache): Router => {
   router.get(
     '/:birthChartId',
     createAuthMiddleware(tokenVerifier),
-    (req: Request, res: Response, next: NextFunction) => {
-      transitController.getTransitsByChartId(req, res, next);
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        await transitController.getTransitsByChartId(req, res, next);
+      } catch (error) {
+        next(error);
+      }
     }
   );
 

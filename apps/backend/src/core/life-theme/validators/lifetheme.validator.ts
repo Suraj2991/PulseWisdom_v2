@@ -4,7 +4,7 @@ import { LifeTheme, ThemeCategory, LifeArea } from '../types/lifeTheme.types';
 
 interface LifeThemeRequest {
   birthChartId: string;
-  focusAreas?: LifeArea[];
+  lifeAreas?: LifeArea[];
 }
 
 /**
@@ -108,14 +108,14 @@ export function validateLifeThemeRequest(input: LifeThemeRequest): void {
     throw new ValidationError('Valid birth chart ID is required');
   }
 
-  if (input.focusAreas !== undefined) {
-    if (!Array.isArray(input.focusAreas)) {
-      throw new ValidationError('Focus areas must be an array');
+  if (input.lifeAreas !== undefined) {
+    if (!Array.isArray(input.lifeAreas)) {
+      throw new ValidationError('Life areas must be an array');
     }
 
-    input.focusAreas.forEach((area) => {
+    input.lifeAreas.forEach((area) => {
       if (!Object.values(LifeArea).includes(area)) {
-        throw new ValidationError(`Invalid focus area: ${area}. Must be one of: ${Object.values(LifeArea).join(', ')}`);
+        throw new ValidationError(`Invalid life area: ${area}. Must be one of: ${Object.values(LifeArea).join(', ')}`);
       }
     });
   }

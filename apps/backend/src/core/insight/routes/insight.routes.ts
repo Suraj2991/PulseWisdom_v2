@@ -4,9 +4,10 @@ import { BirthChartService } from '../../birthchart';
 import { LifeThemeService } from '../../life-theme';
 import { TransitService } from '../../transit';
 import { EphemerisService, EphemerisClient, CelestialBodyService, AspectService, HouseService, EphemerisErrorHandler } from '../../ephemeris';
-import { AIService, LLMClient, PromptBuilder } from '../../ai';
+import { AIService, LLMClient } from '../../ai';
 import { validateRequest } from '../../../shared/middleware/validateRequest';
 import { z } from 'zod';
+import { Request, Response, NextFunction } from 'express';
 
 import { InsightAnalyzer
   , InsightRepository
@@ -31,8 +32,8 @@ const aiService = new AIService(llmClient, cache);
 const lifeThemeService = new LifeThemeService(cache, birthChartService, aiService, celestialBodyService, aspectService);
 const transitService = new TransitService(ephemerisClient, cache, birthChartService, celestialBodyService, aspectService, houseService, errorHandler);
 const insightRepository = new InsightRepository(cache);
-const insightGenerator = new InsightGenerator(cache, aiService, new PromptBuilder(cache), llmClient, insightRepository);
-const insightAnalyzer = new InsightAnalyzer(cache, lifeThemeService, transitService, PromptBuilder, llmClient);
+const insightGenerator = new InsightGenerator(cache, aiService);
+const insightAnalyzer = new InsightAnalyzer(cache, lifeThemeService, transitService, llmClient);
 
 const insightService = new InsightService(
   cache,
@@ -63,9 +64,19 @@ router.get('/health', (req, res) => {
 });
 
 // Normalize and sanitize insight input
-const normalizeInsightInput = (req: any, res: any, next: any) => {
+interface InsightInput {
+  title?: string;
+  description?: string;
+  recommendations?: string[];
+  type?: string;
+  category?: string;
+  severity?: string;
+  id?: string;
+}
+
+const normalizeInsightInput = (req: Request, res: Response, next: NextFunction) => {
   if (req.body.insights) {
-    req.body.insights = req.body.insights.map((insight: any) => ({
+    req.body.insights = req.body.insights.map((insight: InsightInput) => ({
       ...insight,
       title: insight.title ? Sanitizer.sanitizeString(insight.title) : insight.title,
       description: insight.description ? Sanitizer.sanitizeInsightContent(insight.description) : insight.description,
@@ -132,5 +143,25 @@ const updateInsightsSchema = z.object({
 router.get('/:birthChartId', createAuthMiddleware(tokenVerifier), validateRequest(birthChartIdSchema), insightController.analyzeInsights);
 router.get('/:birthChartId/user/:userId', createAuthMiddleware(tokenVerifier), validateRequest(userIdSchema), insightController.getInsightsByUserId);
 router.get('/:birthChartId/:insightId', createAuthMiddleware(tokenVerifier), validateRequest(birthChartIdSchema), insightController.getInsightsByCategory);
+
+// Add routes with proper validation
+router.get('/:birthChartId/category',
+  createAuthMiddleware(tokenVerifier),
+  validateRequest(categorySchema),
+  insightController.getInsightsByCategory
+);
+
+router.get('/:birthChartId/date-range',
+  createAuthMiddleware(tokenVerifier),
+  validateRequest(dateRangeSchema),
+  insightController.getInsightsByDateRange
+);
+
+router.put('/:birthChartId',
+  createAuthMiddleware(tokenVerifier),
+  validateRequest(updateInsightsSchema),
+  normalizeInsightInput,
+  insightController.updateInsights
+);
 
 export default router; 

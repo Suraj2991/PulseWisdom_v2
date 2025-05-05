@@ -1,9 +1,9 @@
 import { ICache } from '../../../infrastructure/cache/ICache';
 import { Aspect, EphemerisService } from '../../ephemeris';
 import { LifeThemeService } from '../../life-theme';
-import { NotFoundError, AppError, ServiceError } from '../../../domain/errors';
+import { NotFoundError, AppError } from '../../../domain/errors';
 import { BirthChartService, BirthChartDocument } from '../../birthchart';
-import { AIService } from '../../ai';
+import { AIService, LLMClient, PromptBuilder } from '../../ai';
 import { logger } from '../../../shared/logger';
 import { Sanitizer } from '../../../shared/sanitization';
 import { 
@@ -66,12 +66,16 @@ export class InsightService {
     private readonly insightGenerator: InsightGenerator,
     private readonly insightAnalyzer: InsightAnalyzer,
     insightRepository: InsightRepository,
-    analysisRepository: InsightRepository
+    analysisRepository: InsightRepository,
+    private readonly llmClient: LLMClient
   ) {
     this.insightRepository = insightRepository;
     this.analysisRepository = analysisRepository;
     this.insightCacheManager = new InsightCacheManager(cache);
     this.transitCacheManager = new TransitCacheManager(cache);
+
+    // Initialize the InsightGeneratorFactory
+    InsightGeneratorFactory.initialize(aiService, new PromptBuilder(), birthChartService, cache, llmClient);
   }
 
   /**
@@ -237,6 +241,7 @@ export class InsightService {
 
       const insights = await this.generateInsights(birthChartId);
       const analysis = await this.insightAnalyzer.analyzeInsights(birthChartId, date);
+      analysis.insights = insights;
 
       await this.cacheInsightAnalysis(cacheKey, analysis);
       return analysis;
@@ -510,12 +515,7 @@ export class InsightService {
 
   async generateAndStoreDailyInsight(birthChart: BirthChartDocument, transits: Transit[], date: Date): Promise<Insight> {
     try {
-      this.logInfo('Generating and storing daily insight', { birthChartId: birthChart._id, date });
-
-      // Generate insight using AI service
-      const { insight, insightLog } = await this.aiService.getOrGenerateDailyInsight(birthChart, transits, date);
-
-      // Use the factory to get the daily insight generator
+      const { insight, insightLog } = await this.insightGenerator.getOrGenerateDailyInsight(birthChart, transits, date);
       const generator = InsightGeneratorFactory.getGenerator(InsightType.DAILY);
       const insights = await generator.generate({
         birthChartId: birthChart._id.toString(),
@@ -532,23 +532,32 @@ export class InsightService {
         throw new Error('No insights generated');
       }
 
+      // Store the insights
+      await Promise.all(insights.map(insight => 
+        this.insightRepository.createInsight({
+          ...this.convertToIInsight(insight),
+          type: insight.type as InsightType
+        })
+      ));
+
+      // Store the insight log for analytics
+      await this.cache.set(
+        this.getCacheKey(InsightCacheKey.DAILY, `log:${birthChart._id.toString()}`),
+        insightLog,
+        this.CACHE_TTL
+      );
+
       const insightObj = insights[0];
-
-      // Store in database
-      const storedInsight = await this.insightRepository.createInsight(this.convertToIInsight(insightObj) as InsightDocument);
-
-      // Cache the insight
-      const cacheKey = this.getInsightCacheKey(InsightType.DAILY, birthChart._id.toString());
-      await this.cacheInsight(cacheKey, insightObj);
-
-      this.logInfo('Successfully generated and stored daily insight', { 
-        birthChartId: birthChart._id,
-        insightId: (storedInsight as InsightDocument)._id
-      });
-
+      await this.cache.set(this.getCacheKey(InsightCacheKey.DAILY, birthChart._id.toString()), insightObj);
       return insightObj;
     } catch (error) {
-      throw this.handleError('generate and store daily insight', error);
+      logger.error('Failed to generate daily insight', { 
+        error,
+        insightType: InsightType.DAILY,
+        birthChartId: birthChart._id.toString(),
+        userId: birthChart.userId.toString()
+      });
+      throw new AppError(`Failed to generate daily insight: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

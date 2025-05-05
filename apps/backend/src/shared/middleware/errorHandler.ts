@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ValidationError as ExpressValidationError, validationResult } from 'express-validator';
+import { ValidationError as ExpressValidationError } from 'express-validator';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import {
   AppError,
@@ -18,6 +18,24 @@ type ErrorSeverity = 'error' | 'warn' | 'info';
 
 type ErrorType = Error | AppError | ValidationError | AuthError | NotFoundError | DatabaseError | CacheError | ConfigurationError | RateLimitError | ServiceUnavailableError | ExpressValidationError[];
 
+interface ValidationErrorDetail {
+  field: string;
+  message: string;
+}
+
+interface ErrorLogData {
+  requestId: string;
+  timestamp: string;
+  severity: ErrorSeverity;
+  name: string;
+  message: string;
+  stack?: string;
+  details?: unknown;
+  path: string;
+  method: string;
+  ip: string;
+}
+
 const getErrorSeverity = (err: ErrorType): ErrorSeverity => {
   if (err instanceof RateLimitError) return 'warn';
   if (err instanceof ValidationError || err instanceof AuthError) return 'info';
@@ -25,31 +43,39 @@ const getErrorSeverity = (err: ErrorType): ErrorSeverity => {
 };
 
 const getRequestId = (req: Request): string => {
-  return req?.headers?.['x-request-id'] as string || 'unknown';
+  const requestId = req?.headers?.['x-request-id'];
+  return typeof requestId === 'string' ? requestId : 'unknown';
+};
+
+const getValidationErrorDetails = (errors: ExpressValidationError[]): ValidationErrorDetail[] => {
+  return errors.map(error => ({
+    field: typeof error.type === 'string' ? error.type : 'unknown',
+    message: error.msg || 'Invalid value',
+  }));
 };
 
 export const errorHandler = (
   err: ErrorType,
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ) => {
   const requestId = getRequestId(req);
   const severity = getErrorSeverity(err);
   const timestamp = new Date().toISOString();
 
   // Enhanced error logging
-  const logData = {
+  const logData: ErrorLogData = {
     requestId,
     timestamp,
     severity,
     name: Array.isArray(err) ? 'ValidationErrors' : err.name,
     message: Array.isArray(err) ? 'Validation failed' : err.message,
     stack: Array.isArray(err) ? undefined : err.stack,
-    details: (err as any).details,
+    details: err instanceof AppError ? err.details : undefined,
     path: req.path,
     method: req.method,
-    ip: req.ip,
+    ip: req.ip || 'unknown',
   };
 
   // Log based on severity
@@ -63,14 +89,12 @@ export const errorHandler = (
 
   // Handle express-validator ValidationError
   if (Array.isArray(err)) {
+    const details = getValidationErrorDetails(err);
     return res.status(400).json({
       status: 'error',
       code: 'VALIDATION_ERROR',
       message: 'Validation failed',
-      details: err.map(e => ({
-        field: (e as any).param || (e as any).path,
-        message: (e as any).msg || (e as any).message,
-      })),
+      details,
     });
   }
 

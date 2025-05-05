@@ -21,7 +21,7 @@ import { getSignFromLongitude } from '../../insight';
 import { ICache } from '../../../infrastructure/cache/ICache';
 import { NotFoundError, ServiceError } from '../../../domain/errors';
 import { logger } from '../../../shared/logger';
-import { TRANSIT_WINDOW_DAYS, TRANSIT_WINDOW_DURATION, AspectType, ZodiacSign } from '../../../shared/constants/astrology';
+import { TRANSIT_WINDOW_DURATION, AspectType, ZodiacSign } from '../../../shared/constants/astrology';
 import { adaptBirthChartData } from '../../birthchart/adapters/BirthChart.adapters';
 
 import { ObjectId } from 'mongodb';
@@ -204,7 +204,7 @@ export class TransitService extends BaseEphemerisService {
       const relevantAspects = this.filterRelevantAspects(aspects, natalBody);
       
       for (const aspect of relevantAspects) {
-        const transit = await this.createTransitFromAspect(aspect, natalBody, positions, birthChart, date);
+        const transit = this.createTransitFromAspect(aspect, natalBody, positions, birthChart, date);
         if (transit) {
           transits.push(transit);
         }
@@ -225,9 +225,9 @@ export class TransitService extends BaseEphemerisService {
         longitude: pos.longitude,
         latitude: pos.latitude,
         speed: pos.speed,
-        house: 1,
+        house: 1, // Default to house 1 since it's optional in CelestialPosition
         sign: this.getSignFromLongitude(pos.longitude),
-        signLongitude: this.getSignLongitude(pos.longitude)
+        retrograde: pos.speed < 0
       }))
     ]);
   }
@@ -267,13 +267,13 @@ export class TransitService extends BaseEphemerisService {
     return baseStrength * (1 - orb / 10);
   }
 
-  private async createTransitFromAspect(
+  private createTransitFromAspect(
     aspect: AspectResponse,
     natalBody: CelestialBody,
     positions: Record<string, CelestialPosition>,
     birthChart: BirthChart,
     date: DateTime
-  ): Promise<Transit | null> {
+  ): Transit | null {
     const transitBodyName = aspect.body1 === natalBody.name ? aspect.body2 : aspect.body1;
     const transitPosition = positions[transitBodyName.toLowerCase()];
     if (!transitPosition) return null;
@@ -377,27 +377,8 @@ export class TransitService extends BaseEphemerisService {
     return Array.from(keywords);
   }
 
-  private generateWindowTitle(transit: Transit): string {
-    const type = this.determineWindowType(transit);
-    const planet = transit.planet;
-    const sign = transit.sign;
-    
-    switch (type) {
-      case 'Opportunity':
-        return `${planet} in ${sign}: Favorable Period`;
-      case 'Challenge':
-        return `${planet} in ${sign}: Growth Opportunity`;
-      case 'Integration':
-        return `${planet} in ${sign}: Transformative Period`;
-      default:
-        return `${planet} Transit in ${sign}`;
-    }
-  }
-
-  private determineWindowType(transit: Transit): 'Opportunity' | 'Challenge' | 'Integration' {
-    if (transit.windowType === WindowType.Challenge) return 'Challenge';
-    if (transit.windowType === WindowType.Opportunity) return 'Opportunity';
-    return 'Integration';
+  private determineWindowType(transit: Transit): WindowType {
+    return transit.windowType;
   }
 
   protected getCelestialPositionByName(positions: Record<string, CelestialPosition>, name: string): CelestialPosition | null {
@@ -410,14 +391,14 @@ export class TransitService extends BaseEphemerisService {
 
   protected convertToDomainCelestialBody(position: CelestialPosition, name: string): CelestialBody {
     return {
-      id: 0, // This should be assigned based on some logic
+      id: 0,
       name,
       longitude: position.longitude,
       latitude: position.latitude,
       speed: position.speed,
-      house: 1, // Default to first house if not specified
+      house: 1, // Default to house 1 since it's optional in CelestialPosition
       sign: this.getSignFromLongitude(position.longitude),
-      signLongitude: this.getSignLongitude(position.longitude)
+      retrograde: position.speed < 0
     };
   }
 
@@ -483,10 +464,9 @@ export class TransitService extends BaseEphemerisService {
     // Group by window type
     const byWindowType = new Map<WindowType, Transit[]>();
     transits.forEach(transit => {
-      if (!byWindowType.has(transit.windowType)) {
-        byWindowType.set(transit.windowType, []);
-      }
-      byWindowType.get(transit.windowType)!.push(transit);
+      const transitList = byWindowType.get(transit.windowType) || [];
+      byWindowType.set(transit.windowType, transitList);
+      transitList.push(transit);
     });
     
     // Generate themes for each window type
@@ -495,13 +475,13 @@ export class TransitService extends BaseEphemerisService {
       const aspects = [...new Set(windowTransits.map(t => t.influence))];
       
       switch (type) {
-        case 'Opportunity':
+        case WindowType.Opportunity:
           themes.add(`Favorable ${planets.join(', ')} influences creating ${aspects.join(', ')} aspects`);
           break;
-        case 'Challenge':
+        case WindowType.Challenge:
           themes.add(`Challenging ${planets.join(', ')} aspects requiring attention`);
           break;
-        case 'Integration':
+        case WindowType.Integration:
           themes.add(`Transformative ${planets.join(', ')} aspects for growth`);
           break;
       }
@@ -515,13 +495,13 @@ export class TransitService extends BaseEphemerisService {
     
     transits.forEach(transit => {
       switch (transit.windowType) {
-        case 'Opportunity':
+        case WindowType.Opportunity:
           recommendations.add(`Take advantage of ${transit.planet}'s favorable influence in ${transit.sign}`);
           break;
-        case 'Challenge':
+        case WindowType.Challenge:
           recommendations.add(`Be mindful of ${transit.planet}'s challenging aspect to ${transit.aspectingNatal?.name}`);
           break;
-        case 'Integration':
+        case WindowType.Integration:
           recommendations.add(`Reflect on ${transit.planet}'s transformative influence in house ${transit.house}`);
           break;
       }
@@ -545,10 +525,9 @@ export class TransitService extends BaseEphemerisService {
     
     transits.forEach(transit => {
       const type = transit.windowType;
-      if (!grouped.has(type)) {
-        grouped.set(type, []);
-      }
-      grouped.get(type)!.push(transit);
+      const transitList = grouped.get(type) || [];
+      grouped.set(type, transitList);
+      transitList.push(transit);
     });
     
     return grouped;
@@ -584,16 +563,33 @@ export class TransitService extends BaseEphemerisService {
     return windows;
   }
 
+  private generateWindowTitle(transit: Transit): string {
+    const type = this.determineWindowType(transit);
+    const planet = transit.planet;
+    const sign = transit.sign;
+    
+    switch (type) {
+      case WindowType.Opportunity:
+        return `${planet} in ${sign}: Favorable Period`;
+      case WindowType.Challenge:
+        return `${planet} in ${sign}: Growth Opportunity`;
+      case WindowType.Integration:
+        return `${planet} in ${sign}: Transformative Period`;
+      default:
+        return `${planet} Transit in ${sign}`;
+    }
+  }
+
   private generateWindowDescription(transits: Transit[], windowType: WindowType): string {
     const planetNames = [...new Set(transits.map(t => t.planet))];
     const aspectTypes = [...new Set(transits.map(t => t.influence))];
     
     switch (windowType) {
-      case 'Opportunity':
+      case WindowType.Opportunity:
         return `Favorable period for ${planetNames.join(', ')} influences with ${aspectTypes.join(', ')} aspects`;
-      case 'Challenge':
+      case WindowType.Challenge:
         return `Challenging period with ${planetNames.join(', ')} creating ${aspectTypes.join(', ')} aspects`;
-      case 'Integration':
+      case WindowType.Integration:
         return `Transformative period as ${planetNames.join(', ')} form ${aspectTypes.join(', ')} aspects`;
       default:
         return 'Significant transit period';
