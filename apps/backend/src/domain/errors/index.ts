@@ -19,8 +19,8 @@ export class AppError extends Error {
 export class DomainError extends AppError {
   constructor(
     message: string,
-    code: string = 'DOMAIN_ERROR',
-    statusCode: number = 400,
+    code = 'DOMAIN_ERROR',
+    statusCode = 400,
     details?: any
   ) {
     super(message, code, statusCode, details);
@@ -33,7 +33,7 @@ export class DomainError extends AppError {
 export class AstrologicalError extends DomainError {
   constructor(
     message: string,
-    code: string = 'ASTROLOGICAL_ERROR',
+    code = 'ASTROLOGICAL_ERROR',
     details?: any
   ) {
     super(message, code, 400, details);

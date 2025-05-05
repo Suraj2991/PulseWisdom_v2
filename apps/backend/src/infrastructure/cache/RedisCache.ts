@@ -1,13 +1,13 @@
 import { createClient, RedisClientType } from 'redis';
 import { ICache } from './ICache';
 import { ServiceError } from '../../domain/errors';
-import { CelestialBody } from '../../domain/types/ephemeris.types';
+import { CelestialBody } from '../../core/ephemeris/types/ephemeris.types';
 import { CacheError } from '../../domain/errors';
 import { logger } from '../../shared/logger';
 
 export class RedisCache implements ICache {
   private client: RedisClientType;
-  private isConnected: boolean = false;
+  private isConnected = false;
   private readonly PLANETARY_POSITIONS_KEY = 'planetary:positions';
   private readonly BIRTH_CHART_KEY_PREFIX = 'birthchart:';
   private readonly INSIGHT_KEY_PREFIX = 'insight:';

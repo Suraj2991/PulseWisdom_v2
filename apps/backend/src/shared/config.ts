@@ -48,6 +48,21 @@ interface Config {
   enableCors: boolean;
   enableRateLimit: boolean;
   enableCache: boolean;
+
+  // AI Configuration
+  ai: {
+    model: string;
+    temperature: number;
+    timeoutMs: number;
+    maxRetries: number;
+    retryDelayMs: number;
+    promptTags: {
+      daily: string;
+      weekly: string;
+      nodePath: string;
+      lifeTheme: string;
+    };
+  };
 }
 
 // Helper function to validate required environment variables
@@ -124,7 +139,22 @@ export const config: Config = {
   enableCompression: validateBooleanEnvVar('ENABLE_COMPRESSION', process.env.ENABLE_COMPRESSION, true),
   enableCors: validateBooleanEnvVar('ENABLE_CORS', process.env.ENABLE_CORS, true),
   enableRateLimit: validateBooleanEnvVar('ENABLE_RATE_LIMIT', process.env.ENABLE_RATE_LIMIT, true),
-  enableCache: validateBooleanEnvVar('ENABLE_CACHE', process.env.ENABLE_CACHE, true)
+  enableCache: validateBooleanEnvVar('ENABLE_CACHE', process.env.ENABLE_CACHE, true),
+
+  // AI Configuration
+  ai: {
+    model: process.env.AI_MODEL || 'gpt-4',
+    temperature: validateNumericEnvVar('AI_TEMPERATURE', process.env.AI_TEMPERATURE, 0.7),
+    timeoutMs: validateNumericEnvVar('AI_TIMEOUT_MS', process.env.AI_TIMEOUT_MS, 12000),
+    maxRetries: validateNumericEnvVar('AI_MAX_RETRIES', process.env.AI_MAX_RETRIES, 3),
+    retryDelayMs: validateNumericEnvVar('AI_RETRY_DELAY_MS', process.env.AI_RETRY_DELAY_MS, 1000),
+    promptTags: {
+      daily: '[Daily Insight]',
+      weekly: '[Weekly Digest]',
+      nodePath: '[Node Path Insight]',
+      lifeTheme: '[Life Theme Forecast]'
+    }
+  }
 };
 
 // Helper function to mask sensitive values in logs

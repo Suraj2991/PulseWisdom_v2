@@ -2,10 +2,10 @@ import express, { RequestHandler } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import { errorHandler } from './api/middleware/errorHandler';
+import { errorHandler } from './shared/middleware/errorHandler';
 import { requestLogger } from './shared/middleware/requestLogger';
 import { addRequestId } from './shared/middleware/requestId';
-import { setupRoutes } from './api/routes';
+import { setupRoutes } from './api';
 
 // Create Express app
 const app = express();

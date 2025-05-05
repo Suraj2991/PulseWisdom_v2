@@ -1,66 +1,45 @@
+import express from 'express';
 import { config } from './shared/config';
-import app from './app';
-import { initializeServices } from './bootstrap/services';
+import { errorHandler } from './shared/middleware/errorHandler';
+import { addRequestId } from './shared/middleware/requestId';
+import { requestLogger } from './shared/middleware/requestLogger';
+import { RateLimiter } from './shared/utils/rateLimiter';
+import { container } from './bootstrap';
 import { logger } from './shared/logger';
-import { DatabaseService } from './infrastructure/database';
-import { closeConnections } from './shared/database';
-import { ConfigurationError } from './domain/errors';
 
-const startServer = async () => {
+const app = express();
+
+// Middleware
+app.use(addRequestId);
+app.use(requestLogger);
+
+// Rate limiting middleware
+const rateLimiter = new RateLimiter();
+app.use((req, res, next) => {
+  const key = req.ip || 'unknown';
+  if (rateLimiter.isRateLimited(key)) {
+    res.status(429).json({ error: 'Too many requests' });
+    return;
+  }
+  next();
+});
+
+app.use(errorHandler);
+
+// Start server
+const PORT = config.port || 3000;
+app.listen(PORT, () => {
+  logger.info(`Server is running on port ${PORT}`);
+});
+
+// Initialize application
+const init = async () => {
   try {
-    // Initialize database service
-    const dbService = DatabaseService.getInstance();
-    await dbService.initialize();
-    logger.info('Connected to MongoDB');
-
-    // Initialize services
-    const services = await initializeServices();
-
-    // Initialize Redis connection
-    await services.cacheClient.connect();
-    logger.info('Connected to Redis');
-
-    // Start the server
-    const server = app.listen(config.port, () => {
-      logger.info('Server started', {
-        port: config.port,
-        environment: process.env.NODE_ENV || 'development'
-      });
-    });
-
-    /**
-     * Graceful shutdown handler
-     * Ensures all connections (HTTP, MongoDB, Redis) are properly closed
-     * before the process exits
-     */
-    const shutdown = async () => {
-      logger.info('Initiating graceful shutdown...');
-      
-      // Close HTTP server first to stop accepting new connections
-      server.close(async () => {
-        logger.info('HTTP server closed');
-        
-        try {
-          // Close all database connections (MongoDB and Redis)
-          await closeConnections();
-          logger.info('All database connections closed successfully');
-        } catch (error) {
-          logger.error('Error during database shutdown:', error);
-          throw new ConfigurationError('Failed to close database connections during shutdown');
-        }
-        
-        process.exit(0);
-      });
-    };
-
-    // Handle shutdown signals (Ctrl+C, container stop, etc.)
-    process.on('SIGTERM', shutdown);
-    process.on('SIGINT', shutdown);
-
+    await container.getServices();
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error('Failed to bootstrap application:', error);
     process.exit(1);
   }
 };
 
-startServer(); 
+init(); 

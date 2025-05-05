@@ -53,8 +53,15 @@ export const ZODIAC_SIGNS = [
     ALCABITIUS: 'ALCABITIUS'
   } as const;
   
-  export const TRANSIT_WINDOW_DAYS = 30;
-  export const TRANSIT_WINDOW_DURATION = 3; // days
+  export const TRANSIT_WINDOW_DAYS = 45;
+  export const TRANSIT_WINDOW_DURATION = 7;
+  
+  export const CELESTIAL_BODIES = {
+    ...PLANET_STRENGTHS,
+    chiron: 0.8,
+    northNode: 0.8,
+    southNode: 0.8
+  } as const;
   
   export type AspectType = keyof typeof ASPECT_ANGLES;
   export type HouseSystem = typeof HOUSE_SYSTEMS[keyof typeof HOUSE_SYSTEMS];

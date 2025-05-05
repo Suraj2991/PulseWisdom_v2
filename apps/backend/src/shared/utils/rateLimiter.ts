@@ -1,3 +1,5 @@
+import { config } from '../config';
+
 interface RateLimitConfig {
   maxAttempts: number;
   windowMs: number;
@@ -8,7 +10,10 @@ export class RateLimiter {
   private windowMs: number;
   private maxRequests: number;
 
-  constructor(windowMs: number = 15 * 60 * 1000, maxRequests: number = 100) {
+  constructor(
+    windowMs: number = config.rateLimitWindowMs,
+    maxRequests: number = config.rateLimitMax
+  ) {
     this.attempts = new Map();
     this.windowMs = windowMs;
     this.maxRequests = maxRequests;

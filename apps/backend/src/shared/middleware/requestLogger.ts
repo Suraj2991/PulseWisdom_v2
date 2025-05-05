@@ -67,4 +67,14 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
   });
 
   next();
+};
+
+export const logRequest = (req: Request, res: Response, next: NextFunction) => {
+  logger.info('Incoming request', {
+    method: req.method,
+    url: req.url,
+    requestId: req.id,
+    ip: req.ip
+  });
+  next();
 }; 
