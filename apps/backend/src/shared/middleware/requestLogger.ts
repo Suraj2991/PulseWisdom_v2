@@ -1,44 +1,80 @@
 import { Request, Response, NextFunction } from 'express';
-import winston from 'winston';
+import { logger } from '../logger';
 
-// Configure winston logger
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      ),
-    }),
-    new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'combined.log' }),
-  ],
-});
+declare global {
+  namespace Express {
+    interface Request {
+      id?: string;
+      user?: {
+        id: string;
+      };
+    }
+  }
+}
 
-export const requestLogger = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+// Create the middleware
+export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
 
-  // Log when the request completes
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    logger.info({
-      method: req.method,
-      url: req.url,
-      status: res.statusCode,
-      duration: `${duration}ms`,
-      userAgent: req.get('user-agent'),
-      ip: req.ip,
-    });
+  // Log incoming request
+  logger.info('Incoming request', {
+    method: req.method,
+    url: req.originalUrl,
+    ip: req.ip,
+    userAgent: req.get('user-agent'),
+    userId: req.user?.id || 'anonymous',
+    timestamp: new Date().toISOString()
   });
 
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const message = `${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`;
+    
+    if (res.statusCode >= 500) {
+      logger.error(message, {
+        method: req.method,
+        url: req.originalUrl,
+        status: res.statusCode,
+        duration,
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+        userId: req.user?.id || 'anonymous',
+        timestamp: new Date().toISOString()
+      });
+    } else if (res.statusCode >= 400) {
+      logger.warn(message, {
+        method: req.method,
+        url: req.originalUrl,
+        status: res.statusCode,
+        duration,
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+        userId: req.user?.id || 'anonymous',
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      logger.info(message, {
+        method: req.method,
+        url: req.originalUrl,
+        status: res.statusCode,
+        duration,
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+        userId: req.user?.id || 'anonymous',
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  next();
+};
+
+export const logRequest = (req: Request, res: Response, next: NextFunction) => {
+  logger.info('Incoming request', {
+    method: req.method,
+    url: req.url,
+    requestId: req.id,
+    ip: req.ip
+  });
   next();
 }; 

@@ -1,21 +1,51 @@
-import Redis from 'ioredis';
+import { createClient, RedisClientType } from 'redis';
 import { ICache } from './ICache';
-import { ServiceError } from '../../types/errors';
-import { CelestialBody } from '../../types/ephemeris.types';
+import { ServiceError } from '../../domain/errors';
+import { CelestialBody } from '../../core/ephemeris/types/ephemeris.types';
+import { CacheError } from '../../domain/errors';
+import { logger } from '../../shared/logger';
 
 export class RedisCache implements ICache {
-  private readonly client: Redis;
+  private client: RedisClientType;
+  private isConnected = false;
   private readonly PLANETARY_POSITIONS_KEY = 'planetary:positions';
   private readonly BIRTH_CHART_KEY_PREFIX = 'birthchart:';
   private readonly INSIGHT_KEY_PREFIX = 'insight:';
   private readonly DEFAULT_TTL = 3600; // 1 hour
 
-  constructor(redisUrl: string) {
-    this.client = new Redis(redisUrl);
-
-    this.client.on('error', (error: Error) => {
-      console.error('Redis connection error:', error);
+  constructor(url: string) {
+    this.client = createClient({ 
+      url,
+      socket: {
+        reconnectStrategy: (times) => {
+          const delay = Math.min(times * 50, 2000);
+          logger.warn(`Redis reconnecting in ${delay}ms...`);
+          return delay;
+        }
+      }
     });
+
+    this.client.on('error', (err) => logger.error('Redis client error:', err));
+    this.client.on('connect', () => {
+      this.isConnected = true;
+      logger.info('Redis client connected');
+    });
+    this.client.on('disconnect', () => {
+      this.isConnected = false;
+      logger.warn('Redis client disconnected');
+    });
+  }
+
+  async connect(): Promise<void> {
+    if (!this.isConnected) {
+      await this.client.connect();
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.isConnected) {
+      await this.client.quit();
+    }
   }
 
   async get<T>(key: string): Promise<T | null> {
@@ -23,17 +53,22 @@ export class RedisCache implements ICache {
       const value = await this.client.get(key);
       return value ? JSON.parse(value) : null;
     } catch (error) {
-      console.error('Error getting value from cache:', error);
-      throw new ServiceError('Failed to retrieve value from cache');
+      logger.error('Redis get error:', { error, key });
+      throw error;
     }
   }
 
-  async set(key: string, value: any, ttlSeconds: number): Promise<void> {
+  async set<T>(key: string, value: T, ttl?: number): Promise<void> {
     try {
-      await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+      const serialized = JSON.stringify(value);
+      if (ttl) {
+        await this.client.setEx(key, ttl, serialized);
+      } else {
+        await this.client.set(key, serialized);
+      }
     } catch (error) {
-      console.error('Error setting value in cache:', error);
-      throw new ServiceError('Failed to set value in cache');
+      logger.error('Redis set error:', { error, key });
+      throw error;
     }
   }
 
@@ -41,26 +76,27 @@ export class RedisCache implements ICache {
     try {
       await this.client.del(key);
     } catch (error) {
-      console.error('Error deleting key from cache:', error);
-      throw new ServiceError('Failed to delete key from cache');
+      logger.error('Redis delete error:', { error, key });
+      throw error;
     }
   }
 
   async clear(): Promise<void> {
     try {
-      await this.client.flushall();
+      await this.client.flushAll();
     } catch (error) {
-      console.error('Error clearing cache:', error);
-      throw new ServiceError('Failed to clear cache');
+      logger.error('Redis clear error:', { error });
+      throw error;
     }
   }
 
   async exists(key: string): Promise<boolean> {
     try {
-      return (await this.client.exists(key)) === 1;
+      const result = await this.client.exists(key);
+      return result === 1;
     } catch (error) {
-      console.error('Error checking key existence in cache:', error);
-      throw new ServiceError('Failed to check key existence in cache');
+      logger.error('Redis exists error:', { error, key });
+      throw error;
     }
   }
 
@@ -76,7 +112,7 @@ export class RedisCache implements ICache {
 
   async setPlanetaryPositions(positions: CelestialBody[]): Promise<void> {
     try {
-      await this.client.setex(
+      await this.client.setEx(
         this.PLANETARY_POSITIONS_KEY,
         this.DEFAULT_TTL,
         JSON.stringify(positions)
@@ -99,7 +135,7 @@ export class RedisCache implements ICache {
 
   async setBirthChart(id: string, data: any): Promise<void> {
     try {
-      await this.client.setex(
+      await this.client.setEx(
         `${this.BIRTH_CHART_KEY_PREFIX}${id}`,
         this.DEFAULT_TTL,
         JSON.stringify(data)
@@ -131,7 +167,7 @@ export class RedisCache implements ICache {
 
   async setInsight(id: string, data: any): Promise<void> {
     try {
-      await this.client.setex(
+      await this.client.setEx(
         `${this.INSIGHT_KEY_PREFIX}${id}`,
         this.DEFAULT_TTL,
         JSON.stringify(data)
@@ -153,19 +189,10 @@ export class RedisCache implements ICache {
 
   async clearCache(): Promise<void> {
     try {
-      await this.client.flushall();
+      await this.client.flushAll();
     } catch (error) {
       console.error('Error clearing cache:', error);
       throw new ServiceError('Failed to clear cache');
-    }
-  }
-
-  async disconnect(): Promise<void> {
-    try {
-      await this.client.quit();
-    } catch (error) {
-      console.error('Error disconnecting from Redis:', error);
-      throw new ServiceError('Failed to disconnect from Redis');
     }
   }
 
@@ -173,8 +200,18 @@ export class RedisCache implements ICache {
     try {
       return await this.client.keys(pattern);
     } catch (error) {
-      console.error('Error getting keys from cache:', error);
-      throw new ServiceError('Failed to get keys from cache');
+      logger.error('Redis keys error:', { error, pattern });
+      throw error;
+    }
+  }
+
+  async healthCheck(): Promise<boolean> {
+    try {
+      await this.client.ping();
+      return true;
+    } catch (error) {
+      logger.error('Redis health check failed:', { error });
+      return false;
     }
   }
 } 
